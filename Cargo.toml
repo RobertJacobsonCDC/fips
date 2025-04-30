@@ -8,9 +8,8 @@ edition = "2024"
 [features]
 default = ["aspr_archive"]
 
-## Support for working with the ASPR Synthetic Population dataset
-aspr         = []                           # Parsing ASPR codes
-aspr_archive = ["aspr", "zip", "once_cell"] # Reading ASPR Synthetic Population files from ZIP archives
+## Support for working with the ASPR Synthetic Population dataset # Parsing ASPR codes
+aspr_archive = ["zip", "once_cell"] # Reading ASPR Synthetic Population files from ZIP archives
 
 [dependencies]
 ## Dependencies for "aspr_archive"

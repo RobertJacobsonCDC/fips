@@ -1,16 +1,27 @@
-use crate::states::USState;
-use crate::{CountyCode, FIPSCode, IdCode, TractCode, SettingCategory};
-use crate::parser::{parse_decimal_digits_to_bits, parse_state_code, FIPSParseResult, FIPSParserError};
+use crate::{
+  fips_code::FIPSCode,
+  aspr::SettingCategory,
+  CountyCode,
+  IdCode,
+  TractCode,
+  states::USState,
+  parser::{
+    parse_decimal_digits_to_bits, 
+    parse_state_code, 
+    FIPSParseResult, 
+    FIPSParserError,
+  },
+};
 
 // These high-level functions parse the concatenated FIPS code and ids
 
 /// Parses the input as a FIPS code for a home id. Returns `(FIPSCode, rest)`,
 /// where `rest` is the remaining input after the FIPS code.
 pub fn parse_fips_home_id(input: &str) -> FIPSParseResult<FIPSCode> {
-  let (rest, state): (&str, USState) = parse_state_code(input)?;
-  let (rest, county): (&str, CountyCode) = parse_county_code(rest)?;
-  let (rest, tract): (&str, TractCode) = parse_tract_code(rest)?;
-  let (rest, home_id): (&str, u16) = parse_home_id(rest)?;
+  let (rest, state)  : (&str, USState)    = parse_state_code(input)?;
+  let (rest, county) : (&str, CountyCode) = parse_county_code(rest)?;
+  let (rest, tract)  : (&str, TractCode)  = parse_tract_code(rest)?;
+  let (rest, home_id): (&str, IdCode)     = parse_home_id(rest)?;
 
   let fips_code = FIPSCode::new(state, county, tract, SettingCategory::Home, home_id, 0);
   Ok((rest, fips_code))
@@ -19,7 +30,7 @@ pub fn parse_fips_home_id(input: &str) -> FIPSParseResult<FIPSCode> {
 /// Parses the input as a FIPS code for a school id. Returns `(FIPSCode, rest)`,
 /// where `rest` is the remaining input after the FIPS code.
 pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
-  let (rest, state): (&str, USState) = parse_state_code(input)?;
+  let (rest, state) : (&str, USState)    = parse_state_code(input)?;
   let (rest, county): (&str, CountyCode) = parse_county_code(rest)?;
 
   if rest.starts_with("x") {
@@ -38,10 +49,10 @@ pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
 /// Parses the input as a FIPS code for a workplace id. Returns `(FIPSCode, rest)`,
 /// where `rest` is the remaining input after the FIPS code.
 pub fn parse_fips_workplace_id(input: &str) -> FIPSParseResult<FIPSCode> {
-  let (rest, state): (&str, USState) = parse_state_code(input)?;
-  let (rest, county): (&str, CountyCode) = parse_county_code(rest)?;
-  let (rest, tract): (&str, TractCode) = parse_tract_code(rest)?;
-  let (rest, home_id): (&str, u16) = parse_workplace_id(rest)?;
+  let (rest, state)  : (&str, USState)    = parse_state_code(input)?;
+  let (rest, county) : (&str, CountyCode) = parse_county_code(rest)?;
+  let (rest, tract)  : (&str, TractCode)  = parse_tract_code(rest)?;
+  let (rest, home_id): (&str, IdCode)     = parse_workplace_id(rest)?;
 
   let fips_code = FIPSCode::new(state, county, tract, SettingCategory::Workplace, home_id, 0);
   Ok((rest, fips_code))

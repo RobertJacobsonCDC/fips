@@ -19,7 +19,8 @@ each row is a single entry for each person with:
 
 */
 
-use crate::FIPSCode;
+use std::fmt::Display;
+use crate::fips_code::FIPSCode;
 
 // Re-exported publicly in `parser.rs`.
 pub(crate) mod parser;
@@ -33,6 +34,24 @@ pub struct ASPRPersonRecord {
   pub home_id  : Option<FIPSCode>,
   pub school_id: Option<FIPSCode>,
   pub work_id  : Option<FIPSCode>,
+}
+
+impl Display for ASPRPersonRecord {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "Age: {}", self.age)?;
+
+    if let Some(home) = &self.home_id {
+      write!(f, ", Home: ({})", home)?;
+    }
+    if let Some(school) = &self.school_id {
+      write!(f, ", School: ({})", school)?;
+    }
+    if let Some(work) = &self.work_id {
+      write!(f, ", Work: ({})", work)?;
+    }
+
+    Ok(())
+  }
 }
 
 /// A `SettingCategory` is not a FIPS code but is implicit in the ASPR synthetic population dataset
@@ -63,5 +82,17 @@ impl SettingCategory {
   #[inline(always)]
   pub fn encode(self) -> u8 {
     self as u8
+  }
+}
+
+impl Display for SettingCategory {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      SettingCategory::Unspecified   => write!(f, "Unspecified"),
+      SettingCategory::Home          => write!(f, "Home"),
+      SettingCategory::Workplace     => write!(f, "Workplace"),
+      SettingCategory::PublicSchool  => write!(f, "Public School"),
+      SettingCategory::PrivateSchool => write!(f, "Private School"),
+    }
   }
 }

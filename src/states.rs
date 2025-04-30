@@ -8,6 +8,8 @@ proper states.
 
 use std::fmt::Display;
 
+pub type StateCode = u8;
+
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum USState {
   AL = 1,
@@ -116,28 +118,28 @@ pub enum USState {
 impl USState {
   /// Returns true is `self` is a state or District of Columbia
   pub fn is_state(&self) -> bool {
-    let v = *self as u8;
+    let v = *self as StateCode;
     v <= 56u8 && ![3u8, 7, 14, 43, 52].contains(&v)
   }
   
   /// Returns true if `self` is a state (not including District of Columbia)
   pub fn is_proper_state(&self) -> bool {
-    self.is_state() && *self as u8 != 11
+    self.is_state() && *self as StateCode != 11
   }
   
   /// Returns true if `self` is one of the EAS maritime region codes.
   pub fn is_eas_maritime(&self) -> bool {
-    [57u8, 58, 59, 61, 65, 73, 75, 77, 91, 92, 93, 94, 96, 97, 98].contains(&(*self as u8))
+    [57u8, 58, 59, 61, 65, 73, 75, 77, 91, 92, 93, 94, 96, 97, 98].contains(&(*self as StateCode))
   }
   
   /// Returns the numeric FIPS code for this state. 
   /// 
   /// This representation only requires 6 bits if `self.is_state()`.
-  pub fn encode(&self) -> u8 {
-    *self as u8
+  pub fn encode(&self) -> StateCode {
+    *self as StateCode
   }
   
-  pub fn decode(value: u8) -> Result<USState, ()> {
+  pub fn decode(value: StateCode) -> Result<USState, ()> {
     if !Self::valid_code(value) {
       return Err(());
     }
@@ -145,11 +147,68 @@ impl USState {
   }
   
   
-  pub fn valid_code(code: u8) -> bool {
+  pub fn valid_code(code: StateCode) -> bool {
     // The list in this next line contains all values between 1 and 98 that are not assigned to a valid region.
     // Note that there are codes that are neither states nor EAS maritime region codes nor FIPS 5-1 reserved codes,
     // like Midway Islands, for example.
     code != 0 && code <= 98 && ![62u8, 63, 80, 82, 83, 85, 87, 88, 90].contains(&code)
+  }
+  
+  pub fn as_str(&self) -> &'static str {
+    match self {
+      USState::AL => "AL",
+      USState::AK => "AK",
+      USState::AZ => "AZ",
+      USState::AR => "AR",
+      USState::CA => "CA",
+      USState::CO => "CO",
+      USState::CT => "CT",
+      USState::DE => "DE",
+      USState::DC => "DC", // District of Columbia
+      USState::FL => "FL",
+      USState::GA => "GA",
+      USState::HI => "HI",
+      USState::ID => "ID",
+      USState::IL => "IL",
+      USState::IN => "IN",
+      USState::IA => "IA",
+      USState::KS => "KS",
+      USState::KY => "KY",
+      USState::LA => "LA",
+      USState::ME => "ME",
+      USState::MD => "MD",
+      USState::MA => "MA",
+      USState::MI => "MI",
+      USState::MN => "MN",
+      USState::MS => "MS",
+      USState::MO => "MO",
+      USState::MT => "MT",
+      USState::NE => "NE",
+      USState::NV => "NV",
+      USState::NH => "NH",
+      USState::NJ => "NJ",
+      USState::NM => "NM",
+      USState::NY => "NY",
+      USState::NC => "NC",
+      USState::ND => "ND",
+      USState::OH => "OH",
+      USState::OK => "OK",
+      USState::OR => "OR",
+      USState::PA => "PA",
+      USState::RI => "RI",
+      USState::SC => "SC",
+      USState::SD => "SD",
+      USState::TN => "TN",
+      USState::TX => "TX",
+      USState::UT => "UT",
+      USState::VT => "VT",
+      USState::VA => "VA",
+      USState::WA => "WA",
+      USState::WV => "WV",
+      USState::WI => "WI",
+      USState::WY => "WY",
+      _ => unimplemented!("Only states are supported.")
+    }
   }
 }
 

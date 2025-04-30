@@ -152,8 +152,6 @@ pub fn parse_tract_code(input: &str) -> FIPSParseResult<u32> {
   })
 }
 
-
-#[cfg(feature = "aspr")]
 #[allow(unused_imports)]
 pub use crate::aspr::parser::{
   parse_home_id,
