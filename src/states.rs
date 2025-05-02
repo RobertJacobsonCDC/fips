@@ -7,8 +7,7 @@ proper states.
 */
 
 use std::fmt::Display;
-
-pub type StateCode = u8;
+use crate::StateCode;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum USState {

@@ -1,3 +1,5 @@
+//! These high-level functions parse the concatenated FIPS code and ids.
+
 use crate::{
   fips_code::FIPSCode,
   aspr::SettingCategory,
@@ -12,8 +14,6 @@ use crate::{
     FIPSParserError,
   },
 };
-
-// These high-level functions parse the concatenated FIPS code and ids
 
 /// Parses the input as a FIPS code for a home id. Returns `(FIPSCode, rest)`,
 /// where `rest` is the remaining input after the FIPS code.
@@ -113,7 +113,7 @@ pub fn parse_workplace_id(input: &str) -> FIPSParseResult<IdCode> {
   })
 }
 
-/// Parses the next sequene of decimal digits in `input` without respect to
+/// Parses the next sequence of decimal digits in `input` without respect to
 /// its length of how many bits are required to represent it (thought it must
 /// implicitly be at most 64).
 pub fn parse_integer(input: &str) -> FIPSParseResult<u64> {

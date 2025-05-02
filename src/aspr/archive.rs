@@ -1,304 +1,471 @@
 /*!
-This module is enabled with the "aspr_archive" feature and provides routines to read ASPR synthetic population data.
-These routines can also read from zipped archives.
+This module is enabled with the `aspr_archive` feature and provides facilities to read ASPR synthetic population data.
+
+Set and get the ASPR data path with the `set_aspr_data_path` and `get_aspr_data_path` functions:
+
+```rust
+# use fips::aspr::archive::{get_aspr_data_path, set_aspr_data_path};
+# use std::path::PathBuf;
+let current_path = get_aspr_data_path();
+println!("The current ASPR data path: {:?}", current_path);
+
+set_aspr_data_path(PathBuf::from("../CDC/data/ASPR_Synthetic_Population.zip"));
+let new_path = get_aspr_data_path();
+println!("The new ASPR data path: {:?}", new_path);
+```
+
+You can set the ASPR data path to a zip archive or to a directory. You can refer to subdirectories of the data path
+with the `ALL_STATES_DIR`, `CBSA_ALL_DIR`, `CBSA_ONLY_RESIDENTS_DIR`, `NON_CBSA_RESIDENTS_DIR`, and `MULTI_STATE_DIR`
+constants for convenience. (These are `&str`s.)
+
+You can iterate over the records in a CSV file under the ASPR data path with the `ASPRRecordIterator` struct. This 
+struct transparently handles the case that the ASPR data path is a zip archive or a directory for you. Just provide the 
+path to the CSV file relative to the ASPR data path:
+
+```rust
+# use fips::aspr::archive::{CBSA_ALL_DIR, ASPRRecordIterator};
+# use std::path::PathBuf;
+let subdirectory = PathBuf::from(CBSA_ALL_DIR).join("AK/Ketchikan AK.csv");
+let records = ASPRRecordIterator::from_path(subdirectory);
+// Do something with the records...
+```
+
+The `ASPRRecordIterator::state_population()` function is a convenience function that returns an iterator over the 
+records in `${ASPR_DATA_PATH}/${ALL_STATES_DIR}/${state}.csv`.
+
+```rust
+# use fips::aspr::archive::{ASPRRecordIterator};
+# use fips::USState;
+let records = ASPRRecordIterator::state_population(USState::AK);
+// Do something with the records...
+```
+
+You can get a list of CSV files in a given subdirectory of the ASPR data path with the `iter_csv_files` function. This
+is useful for chaining record iterators using the `from_file_iterator` constructor method:
+
+```rust
+# use fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
+let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_DIR).unwrap());
+// Do something with the records...
+```
+
 */
 
 use std::{
-    path::PathBuf,
-    sync::RwLock,
-    io::BufRead
+  path::PathBuf,
+  sync::RwLock,
+  io::{BufRead, BufReader},
+  fs::File,
+  io::Lines
 };
 use once_cell::sync::Lazy;
-use crate::{
-    aspr::{
-        parser::{parse_fips_home_id, parse_fips_school_id, parse_fips_workplace_id},
-        ASPRPersonRecord
-    },
-    states::USState
+use ouroboros::self_referencing;
+use zip::{
+  read::ZipFile,
+  ZipArchive
 };
-use super::errors::ASPRError;
+use crate::{
+  aspr::{
+    parser::{
+      parse_fips_home_id, 
+      parse_fips_school_id, 
+      parse_fips_workplace_id
+    },
+    ASPRPersonRecord,
+    errors::ASPRError,
+  },
+  states::USState
+};
+
 
 // Directory structure of the ASPR data
-const ALL_STATES_DIR         : &str = "all_states";
-const CBSA_ALL_DIR           : &str = "cbsa_all_work_school_household";
-const CBSA_ONLY_RESIDENTS_DIR: &str = "cbsa_only_residents";
+pub const ALL_STATES_DIR         : &str = "all_states";
+pub const CBSA_ALL_DIR           : &str = "cbsa_all_work_school_household";
+pub const CBSA_ONLY_RESIDENTS_DIR: &str = "cbsa_only_residents";
 // Either of the next two can be affixed to either of the two above directories
-const NON_CBSA_RESIDENTS_DIR : &str = "non_CBSA_residents";
-const MULTI_STATE_DIR        : &str = "Multi-state";
+pub const NON_CBSA_RESIDENTS_DIR : &str = "non_CBSA_residents";
+pub const MULTI_STATE_DIR        : &str = "Multi-state";
 
 
 // Path to the ASPR data directory
 const DEFAULT_ASPR_DATA_PATH: &str = "../CDC/data/ASPR_Synthetic_Population";
+// ToDo: Get the ASPR data path from an environment variable.
 static ASPR_DATA_PATH: Lazy<RwLock<PathBuf>> = Lazy::new(|| RwLock::new(PathBuf::from(DEFAULT_ASPR_DATA_PATH)));
 
 
 /// Setter for the ASPR data directory path.
 pub fn set_aspr_data_path(path: PathBuf) {
-    *ASPR_DATA_PATH.write().unwrap() = path;
+  *ASPR_DATA_PATH.write().unwrap() = path;
 }
 
 /// Getter for the ASPR data directory path.
 pub fn get_aspr_data_path() -> PathBuf {
-    ASPR_DATA_PATH.read().unwrap().clone()
+  ASPR_DATA_PATH.read().unwrap().clone()
 }
 
-// ToDo: Should we just return a vector? We construct it anyway.
-/// Returns an iterator over all the files in the ASPR "all_states" data directory.
-pub fn iter_all_states_files()
-    -> Result<std::vec::IntoIter<PathBuf>, ASPRError>
-{
-    let mut path = get_aspr_data_path();
-    path.push(ALL_STATES_DIR);
-    
-    let mut files = vec![];
-    let entries   = path.read_dir().map_err(|e| ASPRError::Io(e) )?;
+// region ZipLineIterator
 
-    for entry in entries {
-        let entry = entry.map_err(|e| ASPRError::Io(e) )?;
-        if entry.path().is_file() {
-            files.push(entry.path());
+/// Iterator over lines in a particular ASPR data file within a zip archive.
+#[self_referencing]
+struct ZipLineIterator {
+  _archive: ZipArchive<BufReader<File>>,
+
+  // This option is always `Some` after successful construction.
+  #[borrows(mut _archive)]
+  #[covariant]
+  line_iter: Option<Lines<BufReader<ZipFile<'this, BufReader<File>>>>>,
+}
+
+impl ZipLineIterator {
+  /// Constructs a ZipLineIterator over the lines of the file `path` zipped inside the archive at `archive_path`.
+  pub fn from_path(archive_path: PathBuf, path: PathBuf) -> Result<Self, ASPRError> {
+    // Open the file with a buffer. These values are consumed.
+    let file   = File::open(archive_path).map_err(|e| ASPRError::Io(e) )?;
+    let reader = BufReader::new(file);
+    // Capturing an error during construction is a little awkward.
+    let mut maybe_error: Option<ASPRError> = None;
+
+    let zip_line_iter = ZipLineIteratorBuilder {
+      _archive: ZipArchive::new(reader).map_err(|e| {ASPRError::ZipError(e)})?,
+
+      line_iter_builder: |archive: &mut ZipArchive<BufReader<File>>| {
+        match archive.by_name(path.to_str().unwrap()) {
+          Ok(zipped_file) => {
+            let buf_zipped_file = BufReader::new(zipped_file);
+            Some(buf_zipped_file.lines())
+          },
+          Err(e) => {
+            maybe_error = Some(ASPRError::ZipError(e));
+            None
+          }
         }
+      }
+    }.build();
+
+    if let Some(e) = maybe_error {
+      Err(e)
+    } else {
+      Ok(zip_line_iter)
     }
 
-    Ok(files.into_iter())
+  }
 }
 
-/// Returns an iterator over all the files in the ASPR "cbsa_all_work_school_household" data directory. In practice,
-/// there are three use cases for subdirectory: state, multi-state, and "non_CBSA_residents".
-/// 
-/// For a specific state, call: `iter_cbsa_all_files(state.as_str())` <br>
-/// For multi-state, call: `iter_cbsa_all_files(MULTI_STATE_DIR)` <br>
-/// For "non_CBSA_residents" data directory, call: `iter_cbsa_all_files(NON_CBSA_RESIDENTS_DIR)`
-pub fn iter_cbsa_all_files(subdirectory: &'static str) -> Result<std::vec::IntoIter<PathBuf>, ASPRError> {
-    let mut path = get_aspr_data_path();
-    path.push(CBSA_ALL_DIR);
+impl Iterator for ZipLineIterator {
+  type Item = Result<String, ASPRError>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    self.with_line_iter_mut(
+      |line_iter| line_iter.as_mut()
+                           .unwrap() // always safe
+                           .next()
+                           .map(|r| r.map_err(|e| ASPRError::Io(e)) )
+    )
+  }
+}
+// endregion ZipLineIterator
+
+/// Interface abstracting over the different ways to iterate over lines in an ASPR data file.
+enum LineIterator {
+  File(Lines<BufReader<File>>),
+  Zip(ZipLineIterator)
+}
+
+impl LineIterator {
+  pub fn from_path(file_path: PathBuf) -> Result<Self, ASPRError> {
+    let path = get_aspr_data_path();
+
+    // The dance to check if the path is a zip archive is ridiculous.
+    if path.extension()
+           .and_then(|ext| ext.to_str())
+           .map(|s| s.eq_ignore_ascii_case("zip"))
+           .unwrap_or(false) {
+      // The path is a zip archive.
+      Ok(LineIterator::Zip(ZipLineIterator::from_path(path, file_path)?))
+    } 
+    else {
+      // The path is a directory.
+      let file = File::open(path.join(file_path)).map_err(|e| ASPRError::Io(e) )?;
+      let reader = BufReader::new(file);
+      Ok(LineIterator::File(reader.lines()))
+    }
+  }
+}
+
+impl Iterator for LineIterator {
+  type Item = Result<String, ASPRError>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match self {
+
+      LineIterator::File(iter) => {
+        iter.next().map(|r| r.map_err(|e| ASPRError::Io(e)))
+      }
+
+      LineIterator::Zip(iter) => {
+        iter.next()
+      }
+
+    }
+  }
+}
+
+/// Returns an iterator over all the data files in the given subdirectory of the ASPR data path. The ASPR data path can
+/// be a zip archive or a directory. The paths returned are relative to the ASPR data path.
+pub fn iter_csv_files(subdirectory: &'static str) -> Result<std::vec::IntoIter<PathBuf>, ASPRError> {
+  let mut path = get_aspr_data_path();
+
+  // The dance to check if the path is a zip archive is ridiculous.
+  if path.extension()
+         .and_then(|ext| ext.to_str())
+         .map(|s| s.eq_ignore_ascii_case("zip"))
+         .unwrap_or(false) {
+    // Iterator through files within the zip archive.
+    let file        = File::open(path).map_err(|e| ASPRError::Io(e) )?;
+    let reader      = BufReader::new(file);
+    let archive = ZipArchive::new(reader).map_err(|e| {ASPRError::ZipError(e)})?;
+    
+    let file_names: Vec<PathBuf> = archive.file_names()
+                                         .filter_map( |s| if s.starts_with(subdirectory) { Some(PathBuf::from(s)) } else { None })
+                                         .collect();
+
+    Ok(file_names.into_iter())
+  } 
+  else {
+    // Iterator through files in the directory.
     path.push(subdirectory);
-    
     let mut files = vec![];
     let entries   = path.read_dir().map_err(|e| ASPRError::Io(e) )?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| ASPRError::Io(e) )?;
-        if entry.path().is_file() {
-            files.push(entry.path());
-        }
+      // We don't use `filter_map` so we can return an error here.
+      let entry = entry.map_err(|e| ASPRError::Io(e) )?;
+      if entry.path().is_file() {
+        files.push(entry.path());
+      }
     }
 
     Ok(files.into_iter())
-}
-
-/// Returns an iterator over all the files in the ASPR "cbsa_all_work_school_household" data directory.
-pub fn iter_cbsa_only_residents_files(subdirectory: &'static str) -> Result<std::vec::IntoIter<PathBuf>, ASPRError> {
-    let mut path = get_aspr_data_path();
-    path.push(CBSA_ONLY_RESIDENTS_DIR);
-    path.push(subdirectory);
-    
-    let mut files = vec![];
-    let entries   = path.read_dir().map_err(|e| ASPRError::Io(e) )?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| ASPRError::Io(e) )?;
-        if entry.path().is_file() {
-            files.push(entry.path());
-        }
-    }
-
-    Ok(files.into_iter())
+  }
 }
 
 /// Iterator over ASPR records in a particular ASPR data file.
 pub struct ASPRRecordIterator {
-    line_iter: std::io::Lines<std::io::BufReader<std::fs::File>>,
+  line_iter: LineIterator,
 }
 
 impl ASPRRecordIterator {
-    /// Returns an iterator over the records in `${ASPR_DATA_PATH}/${ALL_STATES_DIR}/${state}.csv`
-    pub fn state_population(state: USState) -> Result<Self, ASPRError> {
-        let file_name = format!("{}.csv", state.to_string().to_lowercase());
-        let mut path  = get_aspr_data_path();
+  /// Returns an iterator over the records in `${ASPR_DATA_PATH}/${ALL_STATES_DIR}/${state}.csv`
+  pub fn state_population(state: USState) -> Result<Self, ASPRError> {
+    let file_name = format!("{}.csv", state.to_string().to_lowercase());
+    let mut path  = PathBuf::from(ALL_STATES_DIR);
+    path.push(file_name);
 
-        path.push(ALL_STATES_DIR);
-        path.push(file_name);
+    Self::from_path(path)
+  }
 
-        Self::from_path(path)
+  /// Returns an iterator over the records in `file_path`. This function is intended to be used with the
+  /// `iter_csv_files` function.
+  pub fn from_path(file_path: PathBuf) -> Result<Self, ASPRError> {
+    // let file          = File::open(path.clone()).map_err(|e| ASPRError::Io(e) )?;
+    let mut line_iter = LineIterator::from_path(file_path.clone())?;
+
+    // Skip the header row
+    if line_iter.next().is_none(){
+      // If there is no header row, something is wrong, so return an error.
+      return Err(ASPRError::EmptyFile(file_path));
     }
 
-    /// Returns an iterator over the records in `path`. This function is intended to be used with the
-    /// `iter_*_files` functions.
-    pub fn from_path(path: PathBuf) -> Result<Self, ASPRError> {
-        let file          = std::fs::File::open(path.clone()).map_err(|e| ASPRError::Io(e) )?;
-        let mut line_iter = std::io::BufReader::new(file).lines();
+    Ok(Self { line_iter })
+  }
 
-        // Skip the header row
-        if line_iter.next().is_none(){
-            // If there is no header row, something is wrong, so return an error.
-            return Err(ASPRError::EmptyFile(path));
-        }
-
-        Ok(Self { line_iter })
-    }
-    
-    /// Returns an iterator over all the rows of all the files in the iterator. This function is intended to be used with the
-    /// `iter_*_files` functions.
-    pub fn from_file_iterator(files: impl Iterator<Item=PathBuf>) 
-        -> impl Iterator<Item = ASPRPersonRecord>
-    {
-        // Try to open each file, drop it if Err(_)
-        files.filter_map(|path| ASPRRecordIterator::from_path(path).ok())
-             // Each successful iterator yields records; flatten them all.
-             .flat_map(|records| records)
-    }
+  /// Returns an iterator over all the rows of all the files in the iterator. This function is intended to be used with
+  /// the `iter_csv_files` function:
+  /// 
+  /// ```rust
+  /// # use fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
+  /// let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_DIR).unwrap());
+  /// ```
+  pub fn from_file_iterator(files: impl Iterator<Item=PathBuf>)
+                            -> impl Iterator<Item = ASPRPersonRecord>
+  {
+    // Try to open each file, drop it if Err(_)
+    files.filter_map(|path| ASPRRecordIterator::from_path(path).ok())
+        // Each successful iterator yields records; flatten them all.
+         .flat_map(|records| records)
+  }
 }
 
 impl Iterator for ASPRRecordIterator {
-    type Item = ASPRPersonRecord;
+  type Item = ASPRPersonRecord;
 
-    /// Returns the next record in the ASPR data file. This function returns `None` on malformed data. We assume
-    /// that the prepared data is well-formed.
-    fn next(&mut self) -> Option<Self::Item> {
-        let line          = (self.line_iter.next()?).ok()?;
-        let mut part_iter = line.split(',');
+  /// Returns the next record in the ASPR data file. This function returns `None` on malformed data. We assume
+  /// that the prepared data is well-formed.
+  fn next(&mut self) -> Option<Self::Item> {
+    let line          = (self.line_iter.next()?).ok()?;
+    let mut part_iter = line.split(',');
 
-        let age           = part_iter.next()?.parse::<u8>().unwrap();
+    let age           = part_iter.next()?.parse::<u8>().unwrap();
 
-        let home_id_str   = part_iter.next()?.trim();
-        let home_id       = parse_fips_home_id(home_id_str).ok().map(|(_, id)| id);
+    let home_id_str   = part_iter.next()?.trim();
+    let home_id       = parse_fips_home_id(home_id_str).ok().map(|(_, id)| id);
 
-        let school_id_str = part_iter.next()?.trim();
-        let school_id     = parse_fips_school_id(school_id_str).ok().map(|(_, id)| id);
+    let school_id_str = part_iter.next()?.trim();
+    let school_id     = parse_fips_school_id(school_id_str).ok().map(|(_, id)| id);
 
-        let work_id_str   = part_iter.next()?.trim();
-        let work_id       = parse_fips_workplace_id(work_id_str).ok().map(|(_, id)| id);
+    let work_id_str   = part_iter.next()?.trim();
+    let work_id       = parse_fips_workplace_id(work_id_str).ok().map(|(_, id)| id);
 
-        Some(
-            ASPRPersonRecord{
-                age,
-                home_id,
-                school_id,
-                work_id,
-            }
-        )
-    }
+    Some(
+      ASPRPersonRecord{
+        age,
+        home_id,
+        school_id,
+        work_id,
+      }
+    )
+  }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+  use super::*;
+  
+  // Enforce serial execution of tests. Since the "zip" tests change the ASPR data path, we also need to set the
+  // ASPR data path to the default value before running the tests.
+  static TEST_MUTEX: Lazy<std::sync::Mutex<()>> = Lazy::new(|| std::sync::Mutex::new(()));
 
-    #[test]
-    fn test_record_iterator_state_population() {
-        let records   = ASPRRecordIterator::state_population(USState::WY).unwrap();
-        // We count the lines in the file excluding the header:
-        //     583,201 - 1 = 583,200
-        assert_eq!(records.count(), 583200);
-    }
-
-    #[test]
-    fn test_record_iterator_from_path() {
-        let data_root = get_aspr_data_path();
-        let path      = data_root.join(CBSA_ALL_DIR).join("AK/Ketchikan AK.csv");
-        let records   = ASPRRecordIterator::from_path(path).unwrap();
-        // We count the lines in the file excluding the header:
-        //     14,133 - 1 = 14,132
-        assert_eq!(records.count(), 14132);
-    }
+  #[test]
+  fn test_record_iterator_state_population() {
+    let _guard = TEST_MUTEX.lock();
+    set_aspr_data_path(PathBuf::from(DEFAULT_ASPR_DATA_PATH));
     
-    #[test]
-    fn test_record_iterator_from_files() {
-        let data_root = get_aspr_data_path();
-        let paths = vec![
-            data_root.join(CBSA_ALL_DIR).join("AK/Ketchikan AK.csv"),
-            data_root.join(CBSA_ALL_DIR).join("TX/Vernon TX.csv"),
-            data_root.join(CBSA_ONLY_RESIDENTS_DIR).join("AK/Ketchikan AK.csv"),
-            data_root.join(CBSA_ONLY_RESIDENTS_DIR).join("TX/Vernon TX.csv"),
-        ].into_iter();
-        
-        let records = ASPRRecordIterator::from_file_iterator(paths);
-        
-        // We sum the count of lines in each file excluding the header:
-        //     14,133 + 16,606 + 13,746 + 12,973 - 4 = 57,454
-        assert_eq!(records.count(), 57454);
+    let records   = ASPRRecordIterator::state_population(USState::WY).unwrap();
+    // We count the lines in the file excluding the header:
+    //     583,201 - 1 = 583,200
+    assert_eq!(records.count(), 583200);
+  }
+
+  #[test]
+  fn test_record_iterator_from_path() {
+    let _guard = TEST_MUTEX.lock();
+    set_aspr_data_path(PathBuf::from(DEFAULT_ASPR_DATA_PATH));
+
+    let path      = PathBuf::from(CBSA_ALL_DIR).join("AK/Ketchikan AK.csv");
+    let records   = match ASPRRecordIterator::from_path(path) {
+      Ok(records) => records,
+      Err(e) => {
+        // println!("{:?}", e);
+        panic!("{:?}", e);
+      }
+    };
+    // We count the lines in the file excluding the header:
+    //     14,133 - 1 = 14,132
+    assert_eq!(records.count(), 14132);
+  }
+
+  #[test]
+  fn test_record_iterator_from_files() {
+    let _guard = TEST_MUTEX.lock();
+    set_aspr_data_path(PathBuf::from(DEFAULT_ASPR_DATA_PATH));
+
+    let all_path = PathBuf::from(CBSA_ALL_DIR);
+    let only_residents_path = PathBuf::from(CBSA_ONLY_RESIDENTS_DIR);
+    let paths = vec![
+      all_path.join("AK/Ketchikan AK.csv"),
+      all_path.join("TX/Vernon TX.csv"),
+      only_residents_path.join("AK/Ketchikan AK.csv"),
+      only_residents_path.join("TX/Vernon TX.csv"),
+    ].into_iter();
+
+    let records = ASPRRecordIterator::from_file_iterator(paths);
+
+    // We sum the count of lines in each file excluding the header:
+    //     14,133 + 16,606 + 13,746 + 12,973 - 4 = 57,454
+    assert_eq!(records.count(), 57454);
+  }
+
+  #[test]
+  fn test_state_row_iter() {
+    let _guard = TEST_MUTEX.lock();
+    set_aspr_data_path(PathBuf::from(DEFAULT_ASPR_DATA_PATH));
+
+    let state         = USState::AL;
+    let state_records = ASPRRecordIterator::state_population(state).unwrap();
+
+    for (idx, record) in state_records.enumerate() {
+      if idx == 10 { break; }
+      println!("{}", record);
     }
+  }
 
-    #[test]
-    fn test_iter_all_states_files() {
-        let files = iter_all_states_files();
-        assert!(files.is_ok());
+  #[test]
+  fn test_zip_record_iterator_state_population() {
+    let _guard = TEST_MUTEX.lock();
 
-        let files = files.unwrap().into_iter();
-        for file in files {
-            println!("{}", file.display());
-        }
+    set_aspr_data_path(
+      get_aspr_data_path().with_extension("zip")
+    );
+    
+    let records   = ASPRRecordIterator::state_population(USState::WY).unwrap();
+    // We count the lines in the file excluding the header:
+    //     583,201 - 1 = 583,200
+    assert_eq!(records.count(), 583200);
+  }
+
+  #[test]
+  fn test_zip_record_iterator_from_path() {
+    let _guard = TEST_MUTEX.lock();
+
+    set_aspr_data_path(
+      get_aspr_data_path().with_extension("zip")
+    );
+
+    let path      = PathBuf::from(CBSA_ALL_DIR).join("AK/Ketchikan AK.csv");
+    let records   = ASPRRecordIterator::from_path(path).unwrap();
+    // We count the lines in the file excluding the header:
+    //     14,133 - 1 = 14,132
+    assert_eq!(records.count(), 14132);
+  }
+
+  #[test]
+  fn test_zip_record_iterator_from_files() {
+    let _guard = TEST_MUTEX.lock();
+
+    set_aspr_data_path(
+      get_aspr_data_path().with_extension("zip")
+    );
+
+    let all_path = PathBuf::from(CBSA_ALL_DIR);
+    let only_residents_path = PathBuf::from(CBSA_ONLY_RESIDENTS_DIR);
+    let paths = vec![
+      all_path.join("AK/Ketchikan AK.csv"),
+      all_path.join("TX/Vernon TX.csv"),
+      only_residents_path.join("AK/Ketchikan AK.csv"),
+      only_residents_path.join("TX/Vernon TX.csv"),
+    ].into_iter();
+
+    let records = ASPRRecordIterator::from_file_iterator(paths);
+
+    // We sum the count of lines in each file excluding the header:
+    //     14,133 + 16,606 + 13,746 + 12,973 - 4 = 57,454
+    assert_eq!(records.count(), 57454);
+  }
+
+  #[test]
+  fn test_zip_state_row_iter() {
+    let _guard = TEST_MUTEX.lock();
+
+    set_aspr_data_path(
+      get_aspr_data_path().with_extension("zip")
+    );
+
+    let state         = USState::AL;
+    let state_records = ASPRRecordIterator::state_population(state).unwrap();
+
+    for (idx, record) in state_records.enumerate() {
+      if idx == 10 { break; }
+      println!("{}", record);
     }
-
-    #[test]
-    fn test_iter_cbsa_all_files() {
-        // Using a state
-        let files = iter_cbsa_all_files(USState::AL.as_str());
-        assert!(files.is_ok());
-
-        let files = files.unwrap().into_iter();
-        for file in files {
-            println!("{}", file.display());
-        }
-
-        // Using "non_CBSA_residents"
-        let files = iter_cbsa_all_files(NON_CBSA_RESIDENTS_DIR);
-        assert!(files.is_ok());
-
-        let files = files.unwrap().into_iter();
-        for file in files {
-            println!("{}", file.display());
-        }
-
-        // Using "Multi-states"
-        let files = iter_cbsa_all_files(MULTI_STATE_DIR);
-        assert!(files.is_ok());
-
-        let files = files.unwrap().into_iter();
-        for file in files {
-            println!("{}", file.display());
-        }
-    }
-
-    #[test]
-    fn test_iter_cbsa_only_residents_files() {
-        // Using a state
-        let files = iter_cbsa_only_residents_files(USState::AL.as_str());
-        assert!(files.is_ok());
-
-        let files = files.unwrap().into_iter();
-        for file in files {
-            println!("{}", file.display());
-        }
-
-        // Using "non_CBSA_residents"
-        let files = iter_cbsa_only_residents_files(NON_CBSA_RESIDENTS_DIR);
-        assert!(files.is_ok());
-
-        let files = files.unwrap().into_iter();
-        for file in files {
-            println!("{}", file.display());
-        }
-
-        // Using "Multi-states"
-        let files = iter_cbsa_only_residents_files(MULTI_STATE_DIR);
-        assert!(files.is_ok());
-
-        let files = files.unwrap().into_iter();
-        for file in files {
-            println!("{}", file.display());
-        }
-    }
-
-    #[test]
-    fn test_state_row_iter() {
-        let state         = USState::AL;
-        let state_records = ASPRRecordIterator::state_population(state).unwrap();
-
-        for (idx, record) in state_records.enumerate() {
-            if idx == 10 { break; }
-            println!("{}", record);
-        }
-    }
+  }
 }

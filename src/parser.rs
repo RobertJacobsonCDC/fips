@@ -144,7 +144,7 @@ pub fn parse_county_code(input: &str) -> FIPSParseResult<u16> {
 }
 
 /// Parses the first six digits of `input` as a FIPS census tract code. Enforces the
-/// requirement that the value fit into 20 bits.
+/// requirement that the value fit into 20 bits (a tautology in this case).
 pub fn parse_tract_code(input: &str) -> FIPSParseResult<u32> {
   parse_decimal_digits_to_bits(6, 20, input).map(|(rest, value)| {
     // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 20 bits.
@@ -152,14 +152,14 @@ pub fn parse_tract_code(input: &str) -> FIPSParseResult<u32> {
   })
 }
 
-#[allow(unused_imports)]
-pub use crate::aspr::parser::{
-  parse_home_id,
-  parse_public_school_id,
-  parse_private_school_id,
-  parse_workplace_id,
-  parse_integer
-};
+// #[allow(unused_imports)]
+// pub use crate::aspr::parser::{
+//   parse_home_id,
+//   parse_public_school_id,
+//   parse_private_school_id,
+//   parse_workplace_id,
+//   parse_integer
+// };
 
 
 #[cfg(test)]
@@ -293,9 +293,6 @@ mod tests {
 
     #[test]
     fn test_parse_tract_code_invalid_cases() {
-        // Value exceeds 20 bits (2^20 = 1048576)
-        assert!(parse_tract_code("1048576rest").is_err());
-
         // Non-digit characters
         assert!(parse_tract_code("12345xrest").is_err());
 
