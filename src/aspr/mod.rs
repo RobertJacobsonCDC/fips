@@ -66,6 +66,7 @@ pub enum SettingCategory {
   Workplace,
   PublicSchool,
   PrivateSchool,
+  CensusTract,
 }
 
 impl SettingCategory {
@@ -94,6 +95,7 @@ impl Display for SettingCategory {
       SettingCategory::Workplace     => write!(f, "Workplace"),
       SettingCategory::PublicSchool  => write!(f, "Public School"),
       SettingCategory::PrivateSchool => write!(f, "Private School"),
+      SettingCategory::CensusTract   => write!(f, "Census Tract"),
     }
   }
 }

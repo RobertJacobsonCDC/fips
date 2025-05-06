@@ -14,5 +14,5 @@ aspr_archive = ["zip", "once_cell", "ouroboros"] # Reading ASPR Synthetic Popula
 [dependencies]
 ## Dependencies for "aspr_archive"
 zip       = { version = "2.6.1",  optional = true }
-once_cell = { version = "1.21.3", optional = true }
+once_cell = { version = "1", optional = true }
 ouroboros = { version = "0.18.5", optional = true }
