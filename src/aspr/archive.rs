@@ -18,8 +18,8 @@ You can set the ASPR data path to a zip archive or to a directory. You can refer
 with the `ALL_STATES_DIR`, `CBSA_ALL_DIR`, `CBSA_ONLY_RESIDENTS_DIR`, `NON_CBSA_RESIDENTS_DIR`, and `MULTI_STATE_DIR`
 constants for convenience. (These are `&str`s.)
 
-You can iterate over the records in a CSV file under the ASPR data path with the `ASPRRecordIterator` struct. This 
-struct transparently handles the case that the ASPR data path is a zip archive or a directory for you. Just provide the 
+You can iterate over the records in a CSV file under the ASPR data path with the `ASPRRecordIterator` struct. This
+struct transparently handles the case that the ASPR data path is a zip archive or a directory for you. Just provide the
 path to the CSV file relative to the ASPR data path:
 
 ```rust
@@ -30,7 +30,7 @@ let records = ASPRRecordIterator::from_path(subdirectory);
 // Do something with the records...
 ```
 
-The `ASPRRecordIterator::state_population()` function is a convenience function that returns an iterator over the 
+The `ASPRRecordIterator::state_population()` function is a convenience function that returns an iterator over the
 records in `${ASPR_DATA_PATH}/${ALL_STATES_DIR}/${state}.csv`.
 
 ```rust
@@ -67,8 +67,8 @@ use zip::{
 use crate::{
   aspr::{
     parser::{
-      parse_fips_home_id, 
-      parse_fips_school_id, 
+      parse_fips_home_id,
+      parse_fips_school_id,
       parse_fips_workplace_id
     },
     ASPRPersonRecord,
@@ -120,13 +120,13 @@ impl ZipLineIterator {
   /// Constructs a ZipLineIterator over the lines of the file `path` zipped inside the archive at `archive_path`.
   pub fn from_path(archive_path: PathBuf, path: PathBuf) -> Result<Self, ASPRError> {
     // Open the file with a buffer. These values are consumed.
-    let file   = File::open(archive_path).map_err(|e| ASPRError::Io(e) )?;
+    let file   = File::open(archive_path).map_err(ASPRError::Io)?;
     let reader = BufReader::new(file);
     // Capturing an error during construction is a little awkward.
     let mut maybe_error: Option<ASPRError> = None;
 
     let zip_line_iter = ZipLineIteratorBuilder {
-      _archive: ZipArchive::new(reader).map_err(|e| {ASPRError::ZipError(e)})?,
+      _archive: ZipArchive::new(reader).map_err(ASPRError::ZipError)?,
 
       line_iter_builder: |archive: &mut ZipArchive<BufReader<File>>| {
         match archive.by_name(path.to_str().unwrap()) {
@@ -159,7 +159,7 @@ impl Iterator for ZipLineIterator {
       |line_iter| line_iter.as_mut()
                            .unwrap() // always safe
                            .next()
-                           .map(|r| r.map_err(|e| ASPRError::Io(e)) )
+                           .map(|r| r.map_err(ASPRError::Io) )
     )
   }
 }
@@ -182,10 +182,10 @@ impl LineIterator {
            .unwrap_or(false) {
       // The path is a zip archive.
       Ok(LineIterator::Zip(ZipLineIterator::from_path(path, file_path)?))
-    } 
+    }
     else {
       // The path is a directory.
-      let file = File::open(path.join(file_path)).map_err(|e| ASPRError::Io(e) )?;
+      let file = File::open(path.join(file_path)).map_err(ASPRError::Io)?;
       let reader = BufReader::new(file);
       Ok(LineIterator::File(reader.lines()))
     }
@@ -199,7 +199,7 @@ impl Iterator for LineIterator {
     match self {
 
       LineIterator::File(iter) => {
-        iter.next().map(|r| r.map_err(|e| ASPRError::Io(e)))
+        iter.next().map(|r| r.map_err(ASPRError::Io))
       }
 
       LineIterator::Zip(iter) => {
@@ -221,25 +221,25 @@ pub fn iter_csv_files(subdirectory: &'static str) -> Result<std::vec::IntoIter<P
          .map(|s| s.eq_ignore_ascii_case("zip"))
          .unwrap_or(false) {
     // Iterator through files within the zip archive.
-    let file        = File::open(path).map_err(|e| ASPRError::Io(e) )?;
+    let file        = File::open(path).map_err(ASPRError::Io)?;
     let reader      = BufReader::new(file);
-    let archive = ZipArchive::new(reader).map_err(|e| {ASPRError::ZipError(e)})?;
-    
+    let archive = ZipArchive::new(reader).map_err(ASPRError::ZipError)?;
+
     let file_names: Vec<PathBuf> = archive.file_names()
                                          .filter_map( |s| if s.starts_with(subdirectory) { Some(PathBuf::from(s)) } else { None })
                                          .collect();
 
     Ok(file_names.into_iter())
-  } 
+  }
   else {
     // Iterator through files in the directory.
     path.push(subdirectory);
     let mut files = vec![];
-    let entries   = path.read_dir().map_err(|e| ASPRError::Io(e) )?;
+    let entries   = path.read_dir().map_err(ASPRError::Io)?;
 
     for entry in entries {
       // We don't use `filter_map` so we can return an error here.
-      let entry = entry.map_err(|e| ASPRError::Io(e) )?;
+      let entry = entry.map_err(ASPRError::Io)?;
       if entry.path().is_file() {
         files.push(entry.path());
       }
@@ -267,7 +267,7 @@ impl ASPRRecordIterator {
   /// Returns an iterator over the records in `file_path`. This function is intended to be used with the
   /// `iter_csv_files` function.
   pub fn from_path(file_path: PathBuf) -> Result<Self, ASPRError> {
-    // let file          = File::open(path.clone()).map_err(|e| ASPRError::Io(e) )?;
+    // let file          = File::open(path.clone()).map_err(ASPRError::Io)?;
     let mut line_iter = LineIterator::from_path(file_path.clone())?;
 
     // Skip the header row
@@ -281,7 +281,7 @@ impl ASPRRecordIterator {
 
   /// Returns an iterator over all the rows of all the files in the iterator. This function is intended to be used with
   /// the `iter_csv_files` function:
-  /// 
+  ///
   /// ```rust
   /// # use fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
   /// let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_DIR).unwrap());
@@ -291,8 +291,8 @@ impl ASPRRecordIterator {
   {
     // Try to open each file, drop it if Err(_)
     files.filter_map(|path| ASPRRecordIterator::from_path(path).ok())
-        // Each successful iterator yields records; flatten them all.
-         .flat_map(|records| records)
+         // Each successful iterator yields records; flatten them all.
+         .flatten()
   }
 }
 
@@ -330,7 +330,7 @@ impl Iterator for ASPRRecordIterator {
 #[cfg(test)]
 mod tests {
   use super::*;
-  
+
   // Enforce serial execution of tests. Since the "zip" tests change the ASPR data path, we also need to set the
   // ASPR data path to the default value before running the tests.
   static TEST_MUTEX: Lazy<std::sync::Mutex<()>> = Lazy::new(|| std::sync::Mutex::new(()));
@@ -339,7 +339,7 @@ mod tests {
   fn test_record_iterator_state_population() {
     let _guard = TEST_MUTEX.lock();
     set_aspr_data_path(PathBuf::from(DEFAULT_ASPR_DATA_PATH));
-    
+
     let records   = ASPRRecordIterator::state_population(USState::WY).unwrap();
     // We count the lines in the file excluding the header:
     //     583,201 - 1 = 583,200
@@ -406,7 +406,7 @@ mod tests {
     set_aspr_data_path(
       get_aspr_data_path().with_extension("zip")
     );
-    
+
     let records   = ASPRRecordIterator::state_population(USState::WY).unwrap();
     // We count the lines in the file excluding the header:
     //     583,201 - 1 = 583,200

@@ -109,6 +109,7 @@ use std::{
     num::NonZero,
     fmt::{Display, Formatter}
 };
+use std::fmt::Debug;
 use crate::{
     aspr::SettingCategory,
     CountyCode,
@@ -132,7 +133,7 @@ use crate::{
 /// Encodes a hierarchical FIPS geographic region code in 64 bits. Excludes the nonhierarchical codes places,
 /// congressional or state legislative districts, and ZIP code tabulation areas. (See the 
 /// [module level documentation](`crate::fips_code`).)
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct FIPSCode(NonZero<u64>);
 
 impl FIPSCode {
@@ -229,10 +230,56 @@ impl FIPSCode {
     }
     // endregion Accessors
 
-    /// Sets the unused data region occupying the 10 LSB
+    // region Setters
+    
+    /// Creates a copy of `self` with the FIPS STATE set to `state`.
+    pub fn set_state(&self, state: USState) -> Self {
+        let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
+        expanded.state = state;
+        expanded.to_fips_code()
+    }
+    
+    /// Creates a copy of `self` with the FIPS COUNTY set to `county`.
+    pub fn set_county(&self, county: CountyCode) -> Self {
+        let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
+        expanded.county = county;
+        expanded.to_fips_code()
+    }
+    
+    /// Creates a copy of `self` with the FIPS CENSUS TRACT set to `tract`.
+    pub fn set_tract(&self, tract: TractCode) -> Self {
+        let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
+        expanded.tract = tract;
+        expanded.to_fips_code()
+    }
+    
+    /// Creates a copy of `self` with the setting category set to `category`.
+    pub fn set_category(&self, category: SettingCategory) -> Self {
+        let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
+        expanded.category = category;
+        expanded.to_fips_code()
+    }
+    
+    /// Creates a copy of `self` with the ID number set to `id`.
+    pub fn set_id(&self, id: IdCode) -> Self {
+        let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
+        expanded.id = id;
+        expanded.to_fips_code()
+    }
+    
+    /// Creates a copy of `self` with the unused data region set to `data`.
+    pub fn set_data(&self, data: DataCode) -> Self {
+        let mut expanded = ExpandedFIPSCode::from_fips_code(*self);
+        expanded.data = data;
+        expanded.to_fips_code()
+    }
+    
+    // endregion Setters
+    
+    /// Sets the unused data region occupying the 10 LSB in place.
     #[inline(always)]
-    pub fn set_data(&mut self, data: u16) {
-        assert!(data <= TEN_BIT_MASK);
+    pub fn set_data_in_place(&mut self, data: u16) {
+        assert!(data <= TEN_BIT_MASK, "Data must be representable in 10 bits.");
         let inverse_mask = !(TEN_BIT_MASK as u64);
         self.0 = unsafe{
             NonZero::new(
@@ -242,7 +289,8 @@ impl FIPSCode {
     }
 
 
-    /// Compares the given values without respect to the data region (the Least Significant Bits)
+    /// Compares the given values without respect to the data region (the Least Significant Bits). Use the usual equality
+    /// operators for comparing `FIPSCode`s including the data region.
     #[inline(always)]
     pub fn compare_non_data(&self, other: Self) -> Ordering{
         let inverse_mask = !(TEN_BIT_MASK as u64);
@@ -307,6 +355,21 @@ impl FIPSCode {
 impl Display for FIPSCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", ExpandedFIPSCode::from_fips_code(*self))
+    }
+}
+
+impl Debug for FIPSCode {
+    /// Format the code as a string of hex digits with fields separated by dashes. Note that this is different 
+    /// from serializing to the original FIPS code encoding. Use `format_as_fips_code`/`format_as_fips_code` 
+    /// for that purpose. 
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:02}", self.state_code())?;
+        write!(f, "-{:03}", self.county_code())?;
+        write!(f, "-{:06}", self.census_tract_code())?;
+        write!(f, "-{:01}", self.category_code())?;
+        write!(f, "-{:05}", self.id())?;
+        write!(f, "-{:03x}", self.data())?;
+        Ok(())
     }
 }
 

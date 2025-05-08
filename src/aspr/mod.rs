@@ -19,7 +19,7 @@ each row is a single entry for each person with:
 
 */
 
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use crate::fips_code::FIPSCode;
 
 // Re-exported publicly in `parser.rs`.
@@ -97,5 +97,78 @@ impl Display for SettingCategory {
       SettingCategory::PrivateSchool => write!(f, "Private School"),
       SettingCategory::CensusTract   => write!(f, "Census Tract"),
     }
+  }
+}
+
+/// This formats the FIPS code as a string according to the ASPR format, which augments FIPS region codes with setting 
+/// IDs. The category code and "data" field are not represented in this format. However, this function should round-trip
+/// for IDs from the ASPR synthetic population dataset.
+fn format_as_fips_code<W: Write>(fips_code: FIPSCode, f: &mut W) -> std::fmt::Result {
+  write!(f, "{:02}", fips_code.state_code())?;
+  write!(f, "{:03}", fips_code.county_code())?;
+  
+  match fips_code.category() {
+    SettingCategory::Home => {
+      // 11-digit tract + 4-digit within-tract sequential id
+      write!(f, "{:06}", fips_code.census_tract_code())?;
+      write!(f, "{:04}", fips_code.id())
+    }
+    
+    SettingCategory::Workplace => {
+      // 11-digit tract + 5-digit within-tract sequential id
+      write!(f, "{:06}", fips_code.census_tract_code())?;
+      write!(f, "{:05}", fips_code.id())
+    }
+    
+    SettingCategory::PublicSchool => {
+      // 11-digit tract + 3-digit within-tract sequential id
+      write!(f, "{:06}", fips_code.census_tract_code())?;
+      write!(f, "{:03}", fips_code.id())
+    }
+    
+    SettingCategory::PrivateSchool => {
+      // 5-digit county + “xprvx” + 4-digit within-county sequential id
+      write!(f, "xprvx")?;
+      write!(f, "{:04}", fips_code.id())
+    }
+    
+    // ToDo: Give a reasonable representation for these categories.
+    SettingCategory::Unspecified 
+    | SettingCategory::CensusTract => { Err(std::fmt::Error)}
+  }
+  // The category code and "data" field are not represented in this format.
+  // write!(f, "{:01}", fips_code.category_code())?;
+  // write!(f, "{:03}", fips_code.data())?;
+}
+
+fn format_as_fips_code_string(fips_code: FIPSCode) -> String {
+  let mut buf = String::new();
+  format_as_fips_code(fips_code, &mut buf).unwrap();
+  buf
+}
+
+
+#[cfg(test)]
+mod tests {
+  use crate::aspr::parser::{parse_fips_home_id, parse_fips_school_id, parse_fips_workplace_id};
+  use super::*;
+  
+  #[test]
+  fn text_round_trip_formatting() {
+    let home_id = "110010109000024";
+    let workplace_id = "1100100620201546";
+    let public_school_id = "11001009810157";
+    let private_school_id = "24031xprvx0085";
+    
+    let (_, parsed_home_id) = parse_fips_home_id(home_id).unwrap();
+    let (_, parsed_workplace_id) = parse_fips_workplace_id(workplace_id).unwrap();
+    let (_, parsed_public_school_id) = parse_fips_school_id(public_school_id).unwrap();
+    let (_, parsed_private_school_id) = parse_fips_school_id(private_school_id).unwrap();
+
+
+    assert_eq!(home_id, format_as_fips_code_string(parsed_home_id));
+    assert_eq!(workplace_id, format_as_fips_code_string(parsed_workplace_id));
+    assert_eq!(public_school_id, format_as_fips_code_string(parsed_public_school_id));
+    assert_eq!(private_school_id, format_as_fips_code_string(parsed_private_school_id));
   }
 }
