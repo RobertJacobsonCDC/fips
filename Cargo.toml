@@ -10,6 +10,7 @@ default = ["aspr_archive"]
 
 ## Support for working with the ASPR Synthetic Population dataset # Parsing ASPR codes
 aspr_archive = ["zip", "once_cell", "ouroboros"] # Reading ASPR Synthetic Population files from ZIP archives
+aspr_tests   = [] # Runs tests that assume the existence of ASPR Synthetic Population files from ZIP archives
 
 [dependencies]
 ## Dependencies for "aspr_archive"
@@ -18,5 +19,5 @@ once_cell = { version = "1",      optional = true }
 ouroboros = { version = "0.18.5", optional = true }
 
 [lints.clippy]
-uninlined_format_args = "allow"
+uninlined_format_args         = "allow"
 missing_transmute_annotations = "allow"

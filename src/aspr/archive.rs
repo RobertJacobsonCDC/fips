@@ -327,8 +327,11 @@ impl Iterator for ASPRRecordIterator {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "aspr_tests", test))]
 mod tests {
+  //! These tests assume the existence of data in the default ASPR data path AND the existence of the zip archive
+  //! in the default ASPR data path.
+
   use super::*;
 
   // Enforce serial execution of tests. Since the "zip" tests change the ASPR data path, we also need to set the
