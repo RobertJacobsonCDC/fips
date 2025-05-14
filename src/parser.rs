@@ -2,11 +2,13 @@
 
 Simple parsing utilities for parsing text representations of FIPS codes and variations thereupon.
 
-The concatenative structure of hierarchical FIPS geographic region codes, the (decimal) digit count of code fragments, and the bit count (defined by this implementation) allowed for each code fragment, are described in detail in the library level documentation
+The concatenative structure of hierarchical FIPS geographic region codes, the (decimal)
+digit count of code fragments, and the bit count (defined by this implementation) allowed
+for each code fragment, are described in detail in the library level documentation
 
 */
 
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 
 use crate::states::USState;
 
@@ -14,33 +16,29 @@ use crate::states::USState;
 /// The assumption is that the parsing context is so small that it isn't necessary to track source location information.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum FIPSParserError {
-  InvalidDigit{
-    found: char
-  },
-  InvalidLength{
-    expected: u32,
-    found   : u32
-  },
-  ValueExceedsCapacity{
-    value   : u64,
-    capacity: u64,
-  }
+    InvalidDigit { found: char },
+    InvalidLength { expected: u32, found: u32 },
+    ValueExceedsCapacity { value: u64, capacity: u64 },
 }
 
 impl Display for FIPSParserError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      FIPSParserError::InvalidDigit { found } => write!(f, "Invalid digit: {}", found),
-      FIPSParserError::InvalidLength { expected, found } => write!(f, "Expected {} characters, found {}", expected, found),
-      FIPSParserError::ValueExceedsCapacity { value, capacity } => write!(f, "Value {} exceeds max capacity {}", value, capacity),
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FIPSParserError::InvalidDigit { found } => write!(f, "Invalid digit: {}", found),
+            FIPSParserError::InvalidLength { expected, found } => {
+                write!(f, "Expected {} characters, found {}", expected, found)
+            }
+            FIPSParserError::ValueExceedsCapacity { value, capacity } => {
+                write!(f, "Value {} exceeds max capacity {}", value, capacity)
+            }
+        }
     }
-  }
 }
 
 impl Debug for FIPSParserError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    Display::fmt(&self, f)
-  }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self, f)
+    }
 }
 
 impl std::error::Error for FIPSParserError {}
@@ -61,63 +59,59 @@ pub type FIPSParseResult<'a, T> = IResult<&'a str, T>;
 /// with the `FIPSParserError` variant describing the error.
 ///
 /// This function assumes ASCII decimal digits. (The rest of the string can by any  valid UTF-8.)
-pub (crate) fn parse_decimal_digits_to_bits(digit_count: u32, bit_count: u8, input: &str) -> IResult<&str, u64> {
-  let maximum_allowed_value = (1u64 << bit_count) - 1;
-  let mut input_bytes = input.as_bytes().iter();
-  let mut computed_value: u64 = 0;
+pub(crate) fn parse_decimal_digits_to_bits(
+    digit_count: u32,
+    bit_count: u8,
+    input: &str,
+) -> IResult<&str, u64> {
+    let maximum_allowed_value = (1u64 << bit_count) - 1;
+    let mut input_bytes = input.as_bytes().iter();
+    let mut computed_value: u64 = 0;
 
-  for idx in 0..digit_count {
-    match input_bytes.next() {
-
-      Some(c) => {
-        if c.is_ascii_digit() {
-          computed_value = 10*computed_value + (c - b'0') as u64;
-        } else {
-          return Err(
-            (
-              input,
-              FIPSParserError::InvalidDigit {
-                // The UTF-8 encoded character at `idx` might not be represented as a single byte.
-                // However, as we assume ASCII decimal digits, we are gauranteed that the first
-                // `idx-1` bytes represent `idx-1` characters.
-                found: input.chars().nth(idx as usize).unwrap()
-              }
-            )
-          )
-        }
-      }
-
-      None => {
-        // Ran out of digits before we were done parsing.
-        return Err(
-          (
-            input,
-            FIPSParserError::InvalidLength {
-              expected: digit_count,
-              found: idx
+    for idx in 0..digit_count {
+        match input_bytes.next() {
+            Some(c) => {
+                if c.is_ascii_digit() {
+                    computed_value = 10 * computed_value + (c - b'0') as u64;
+                } else {
+                    return Err((
+                        input,
+                        FIPSParserError::InvalidDigit {
+                            // The UTF-8 encoded character at `idx` might not be represented as a single byte.
+                            // However, as we assume ASCII decimal digits, we are gauranteed that the first
+                            // `idx-1` bytes represent `idx-1` characters.
+                            found: input.chars().nth(idx as usize).unwrap(),
+                        },
+                    ));
+                }
             }
-          )
-        )
-      }
 
-    } // end match next byte
-  } // end for idx
+            None => {
+                // Ran out of digits before we were done parsing.
+                return Err((
+                    input,
+                    FIPSParserError::InvalidLength {
+                        expected: digit_count,
+                        found: idx,
+                    },
+                ));
+            }
+        } // end match next byte
+    } // end for idx
 
-  // Enforce the bit count constraint.
-  if computed_value > maximum_allowed_value {
-    return Err(
-      (
-        input,
-        FIPSParserError::ValueExceedsCapacity {
-          value: computed_value,
-          capacity: maximum_allowed_value
-        }
-      )
-    )
-  }
+    // Enforce the bit count constraint.
+    if computed_value > maximum_allowed_value {
+        return Err((
+            input,
+            FIPSParserError::ValueExceedsCapacity {
+                value: computed_value,
+                capacity: maximum_allowed_value,
+            },
+        ));
+    }
 
-  let remaining = &input[digit_count as usize..];
-  Ok((remaining, computed_value))
+    let remaining = &input[digit_count as usize..];
+    Ok((remaining, computed_value))
 }
 
 /// Parses the first two decimal digits of `input` into a `USState` enum variant.
@@ -126,30 +120,30 @@ pub (crate) fn parse_decimal_digits_to_bits(digit_count: u32, bit_count: u8, inp
 /// true. In particular, it enforces the constraint that the decimal value be
 /// representable by 6 binary bits (so values <= 63).
 pub fn parse_state_code(input: &str) -> FIPSParseResult<USState> {
-  parse_decimal_digits_to_bits(2, 6, input).map(|(rest, value)| {
-    // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 6
-    // bits, so this unwrap always succeeds.
-    let state = unsafe { USState::decode(value as u8).unwrap_unchecked() };
-    (rest, state)
-  })
+    parse_decimal_digits_to_bits(2, 6, input).map(|(rest, value)| {
+        // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 6
+        // bits, so this unwrap always succeeds.
+        let state = unsafe { USState::decode(value as u8).unwrap_unchecked() };
+        (rest, state)
+    })
 }
 
 /// Parses the first three digits of `input` as a FIPS county code. Enforces the
 /// requirement that the value fit into 10 bits (a tautology in this case).
 pub fn parse_county_code(input: &str) -> FIPSParseResult<u16> {
-  parse_decimal_digits_to_bits(3, 10, input).map(|(rest, value)| {
-    // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 10 bits.
-    (rest, value as u16)
-  })
+    parse_decimal_digits_to_bits(3, 10, input).map(|(rest, value)| {
+        // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 10 bits.
+        (rest, value as u16)
+    })
 }
 
 /// Parses the first six digits of `input` as a FIPS census tract code. Enforces the
 /// requirement that the value fit into 20 bits (a tautology in this case).
 pub fn parse_tract_code(input: &str) -> FIPSParseResult<u32> {
-  parse_decimal_digits_to_bits(6, 20, input).map(|(rest, value)| {
-    // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 20 bits.
-    (rest, value as u32)
-  })
+    parse_decimal_digits_to_bits(6, 20, input).map(|(rest, value)| {
+        // The `parse_decimal_digits_to_bits` function guarantees `value` fits in 20 bits.
+        (rest, value as u32)
+    })
 }
 
 // #[allow(unused_imports)]
@@ -161,7 +155,6 @@ pub fn parse_tract_code(input: &str) -> FIPSParseResult<u32> {
 //   parse_integer
 // };
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,15 +162,33 @@ mod tests {
     #[test]
     fn test_parse_decimal_digits_to_bits_valid_cases() {
         // Test with different digit and bit counts
-        assert_eq!(parse_decimal_digits_to_bits(2, 6, "42rest"), Ok(("rest", 42)));
-        assert_eq!(parse_decimal_digits_to_bits(3, 10, "123more"), Ok(("more", 123)));
+        assert_eq!(
+            parse_decimal_digits_to_bits(2, 6, "42rest"),
+            Ok(("rest", 42))
+        );
+        assert_eq!(
+            parse_decimal_digits_to_bits(3, 10, "123more"),
+            Ok(("more", 123))
+        );
         assert_eq!(parse_decimal_digits_to_bits(1, 4, "7end"), Ok(("end", 7)));
-        assert_eq!(parse_decimal_digits_to_bits(6, 20, "123456extra"), Ok(("extra", 123456)));
+        assert_eq!(
+            parse_decimal_digits_to_bits(6, 20, "123456extra"),
+            Ok(("extra", 123456))
+        );
 
         // Test maximum values for given bit constraints
-        assert_eq!(parse_decimal_digits_to_bits(2, 6, "63text"), Ok(("text", 63)));
-        assert_eq!(parse_decimal_digits_to_bits(3, 10, "999text"), Ok(("text", 999)));
-        assert_eq!(parse_decimal_digits_to_bits(6, 20, "999999text"), Ok(("text", 999999)));
+        assert_eq!(
+            parse_decimal_digits_to_bits(2, 6, "63text"),
+            Ok(("text", 63))
+        );
+        assert_eq!(
+            parse_decimal_digits_to_bits(3, 10, "999text"),
+            Ok(("text", 999))
+        );
+        assert_eq!(
+            parse_decimal_digits_to_bits(6, 20, "999999text"),
+            Ok(("text", 999999))
+        );
     }
 
     #[test]
@@ -193,18 +204,24 @@ mod tests {
         // Value exceeds bit constraint
         assert!(parse_decimal_digits_to_bits(2, 6, "64text").is_err()); // 64 doesn't fit in 6 bits
         assert_eq!(
-          parse_decimal_digits_to_bits(3, 8, "256text"),
-          Err((
-            "256text",
-            FIPSParserError::ValueExceedsCapacity { value: 256, capacity: 255 }
-          ))
+            parse_decimal_digits_to_bits(3, 8, "256text"),
+            Err((
+                "256text",
+                FIPSParserError::ValueExceedsCapacity {
+                    value: 256,
+                    capacity: 255
+                }
+            ))
         ); // 256 doesn't fit in 8 bits
         assert_eq!(
-          parse_decimal_digits_to_bits(7, 20, "1048576text"),
-          Err((
-            "1048576text",
-            FIPSParserError::ValueExceedsCapacity { value: 1048576, capacity: 1048575 }
-          ))
+            parse_decimal_digits_to_bits(7, 20, "1048576text"),
+            Err((
+                "1048576text",
+                FIPSParserError::ValueExceedsCapacity {
+                    value: 1048576,
+                    capacity: 1048575
+                }
+            ))
         ); // 2^20 = 1048576
     }
 
@@ -253,29 +270,32 @@ mod tests {
     fn test_parse_county_code_invalid_cases() {
         // Non-digit characters
         assert_eq!(
-          parse_county_code("x01rest"),
-          Err((
-            "x01rest",
-            FIPSParserError::InvalidDigit { found: 'x' }
-          ))
+            parse_county_code("x01rest"),
+            Err(("x01rest", FIPSParserError::InvalidDigit { found: 'x' }))
         );
 
         // Too few digits
         assert_eq!(
-          parse_county_code("12"),
-          Err((
-            "12",
-            FIPSParserError::InvalidLength { expected: 3, found: 2 }
-          ))
+            parse_county_code("12"),
+            Err((
+                "12",
+                FIPSParserError::InvalidLength {
+                    expected: 3,
+                    found: 2
+                }
+            ))
         );
 
         // Empty input
         assert_eq!(
-          parse_county_code(""),
-          Err((
-            "",
-            FIPSParserError::InvalidLength { expected: 3, found: 0 }
-          ))
+            parse_county_code(""),
+            Err((
+                "",
+                FIPSParserError::InvalidLength {
+                    expected: 3,
+                    found: 0
+                }
+            ))
         );
     }
 
