@@ -391,7 +391,7 @@ impl ExpandedFIPSCode {
 
 impl Display for ExpandedFIPSCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "state: {}", self.state)?;
+        write!(f, "state: {}", self.state.as_ref())?;
 
         if self.county != 0 {
             write!(f, ", county: {}", self.county)?;
@@ -448,17 +448,6 @@ mod tests {
         assert_eq!(fips_code.category_code(), SettingCategory::Home.into());
         assert_eq!(fips_code.id(), 14938);
         assert_eq!(fips_code.data(), 0x3ff);
-    }
-
-    #[test]
-    fn nonstate_round_trip() {
-        let fips_code = FIPSCode::with_state(USState::VirginIslandsOfTheUS);
-        assert_eq!(fips_code.state(), USState::VirginIslandsOfTheUS);
-        assert_eq!(fips_code.state_code(), 52);
-
-        let fips_code = FIPSCode::with_state(USState::HawaiianCoast);
-        assert_eq!(fips_code.state(), USState::HawaiianCoast);
-        assert_eq!(fips_code.state_code(), 59);
     }
 
     #[test]

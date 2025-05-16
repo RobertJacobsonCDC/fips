@@ -258,7 +258,7 @@ pub struct ASPRRecordIterator {
 impl ASPRRecordIterator {
     /// Returns an iterator over the records in `${ASPR_DATA_PATH}/${ALL_STATES_DIR}/${state}.csv`
     pub fn state_population(state: USState) -> Result<Self, ASPRError> {
-        let file_name = format!("{}.csv", state.to_string().to_lowercase());
+        let file_name = format!("{}.csv", state.as_ref().to_lowercase());
         let mut path = PathBuf::from(ALL_STATES_DIR);
         path.push(file_name);
 
