@@ -1,4 +1,4 @@
-use crate::parser::FIPSParserError;
+use ixa_fips::parser::FIPSParserError;
 use std::{
     error::Error,
     fmt::{Debug, Display},

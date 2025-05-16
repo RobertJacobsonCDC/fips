@@ -1,11 +1,11 @@
 //! These high-level functions parse the concatenated FIPS code and ids.
 
 use crate::{
-    aspr::SettingCategory,
-    fips_code::FIPSCode,
-    parser::{parse_decimal_digits_to_bits, parse_state_code, FIPSParseResult, FIPSParserError},
-    states::USState,
-    CountyCode, IdCode, TractCode,
+    SettingCategory,
+    FIPSCode,
+    fips::parser::{parse_decimal_digits_to_bits, parse_state_code, FIPSParseResult, FIPSParserError},
+    fips::states::USState,
+    fips::{CountyCode, IdCode, TractCode},
 };
 
 /// Parses the input as a FIPS code for a home id. Returns `(FIPSCode, rest)`,
@@ -16,7 +16,7 @@ pub fn parse_fips_home_id(input: &str) -> FIPSParseResult<FIPSCode> {
     let (rest, tract): (&str, TractCode) = parse_tract_code(rest)?;
     let (rest, home_id): (&str, IdCode) = parse_home_id(rest)?;
 
-    let fips_code = FIPSCode::new(state, county, tract, SettingCategory::Home, home_id, 0);
+    let fips_code = FIPSCode::new(state, county, tract, SettingCategory::Home.into(), home_id, 0);
     Ok((rest, fips_code))
 }
 
@@ -33,7 +33,7 @@ pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
             state,
             county,
             0,
-            SettingCategory::PrivateSchool,
+            SettingCategory::PrivateSchool.into(),
             school_id,
             0,
         );
@@ -47,7 +47,7 @@ pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
             state,
             county,
             tract,
-            SettingCategory::PublicSchool,
+            SettingCategory::PublicSchool.into(),
             school_id,
             0,
         );
@@ -67,7 +67,7 @@ pub fn parse_fips_workplace_id(input: &str) -> FIPSParseResult<FIPSCode> {
         state,
         county,
         tract,
-        SettingCategory::Workplace,
+        SettingCategory::Workplace.into(),
         workplace_id,
         0,
     );
@@ -177,8 +177,8 @@ pub fn parse_integer(input: &str) -> FIPSParseResult<u64> {
 
 #[cfg(test)]
 mod tests {
+    use ixa_fips::StateCode;
     use super::*;
-    use crate::StateCode;
 
     #[test]
     fn test_parse_home_id() {

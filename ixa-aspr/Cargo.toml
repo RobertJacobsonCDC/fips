@@ -1,0 +1,24 @@
+[package]
+name = "ixa-aspr"
+description = "A library for reading ASPR synthetic population data"
+edition.workspace = true
+license.workspace = true
+
+
+[features]
+default = ["aspr_tests"]
+
+# Runs tests that assume the existence of ASPR Synthetic Population files from ZIP archives
+aspr_tests = ["aspr_archive"]
+aspr_archive = ["zip", "once_cell", "ouroboros"] # Reading ASPR Synthetic Population files from ZIP archives
+
+[dependencies]
+ixa-fips.workspace = true
+
+## Dependencies for "aspr_archive"
+zip = { workspace = true, optional = true }
+once_cell = { workspace = true, optional = true }
+ouroboros = { workspace = true, optional = true }
+
+[lints]
+workspace = true

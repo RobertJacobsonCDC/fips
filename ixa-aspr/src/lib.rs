@@ -17,10 +17,16 @@ each row is a single entry for each person with:
 4. **Work ID** as a 16-character string:
     - 11-digit tract + 5-digit within-tract sequential id
 
-*/
+These IDs are encoded as a `FIPSCode` struct from `ixa-fips`, an efficient 64-bit representation. This type is 
+re-exported for convenience.
 
-use crate::fips_code::FIPSCode;
+*/
+#![allow(dead_code)]
+
 use std::fmt::{Display, Write};
+
+pub use ixa_fips as fips;
+use fips::FIPSCode;
 
 // Re-exported publicly in `parser.rs`.
 #[cfg(feature = "aspr_archive")]
@@ -28,7 +34,7 @@ pub mod archive;
 pub mod errors;
 pub mod parser;
 
-/// A record representing a person in the ASPR synthetic population dataset
+/// A record representing a person in the ASPR synthetic population dataset.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Default, Debug)]
 pub struct ASPRPersonRecord {
     pub age: u8,
@@ -88,6 +94,12 @@ impl SettingCategory {
     }
 }
 
+impl From<SettingCategory> for u8 {
+    fn from(category: SettingCategory) -> Self {
+        category.encode()
+    }
+}
+
 impl Display for SettingCategory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -104,37 +116,39 @@ impl Display for SettingCategory {
 /// This formats the FIPS code as a string according to the ASPR format, which augments FIPS region codes with setting
 /// IDs. The category code and "data" field are not represented in this format. However, this function should round-trip
 /// for IDs from the ASPR synthetic population dataset.
-fn format_as_fips_code<W: Write>(fips_code: FIPSCode, f: &mut W) -> std::fmt::Result {
+fn format_as_fips_code<W: Write>(f: &mut W, fips_code: FIPSCode) -> std::fmt::Result {
     write!(f, "{:02}", fips_code.state_code())?;
     write!(f, "{:03}", fips_code.county_code())?;
 
-    match fips_code.category() {
-        SettingCategory::Home => {
+    match SettingCategory::decode(fips_code.category_code()) {
+        Some(SettingCategory::Home) => {
             // 11-digit tract + 4-digit within-tract sequential id
             write!(f, "{:06}", fips_code.census_tract_code())?;
             write!(f, "{:04}", fips_code.id())
         }
 
-        SettingCategory::Workplace => {
+        Some(SettingCategory::Workplace) => {
             // 11-digit tract + 5-digit within-tract sequential id
             write!(f, "{:06}", fips_code.census_tract_code())?;
             write!(f, "{:05}", fips_code.id())
         }
 
-        SettingCategory::PublicSchool => {
+        Some(SettingCategory::PublicSchool) => {
             // 11-digit tract + 3-digit within-tract sequential id
             write!(f, "{:06}", fips_code.census_tract_code())?;
             write!(f, "{:03}", fips_code.id())
         }
 
-        SettingCategory::PrivateSchool => {
+        Some(SettingCategory::PrivateSchool) => {
             // 5-digit county + “xprvx” + 4-digit within-county sequential id
             write!(f, "xprvx")?;
             write!(f, "{:04}", fips_code.id())
         }
 
         // ToDo: Give a reasonable representation for these categories.
-        SettingCategory::Unspecified | SettingCategory::CensusTract => Err(std::fmt::Error),
+        Some(SettingCategory::Unspecified) 
+        | Some(SettingCategory::CensusTract)
+        | None => Err(std::fmt::Error),
     }
     // The category code and "data" field are not represented in this format.
     // write!(f, "{:01}", fips_code.category_code())?;
@@ -143,14 +157,14 @@ fn format_as_fips_code<W: Write>(fips_code: FIPSCode, f: &mut W) -> std::fmt::Re
 
 fn format_as_fips_code_string(fips_code: FIPSCode) -> String {
     let mut buf = String::new();
-    format_as_fips_code(fips_code, &mut buf).unwrap();
+    format_as_fips_code(&mut buf, fips_code).unwrap();
     buf
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::aspr::parser::{parse_fips_home_id, parse_fips_school_id, parse_fips_workplace_id};
+    use crate::parser::{parse_fips_home_id, parse_fips_school_id, parse_fips_workplace_id};
 
     #[test]
     fn text_round_trip_formatting() {

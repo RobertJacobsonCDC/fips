@@ -4,7 +4,7 @@ This module is enabled with the `aspr_archive` feature and provides facilities t
 Set and get the ASPR data path with the `set_aspr_data_path` and `get_aspr_data_path` functions:
 
 ```rust
-# use ixa_fips::aspr::archive::{get_aspr_data_path, set_aspr_data_path};
+# use ixa_aspr::archive::{get_aspr_data_path, set_aspr_data_path};
 # use std::path::PathBuf;
 let current_path = get_aspr_data_path();
 println!("The current ASPR data path: {:?}", current_path);
@@ -23,7 +23,7 @@ struct transparently handles the case that the ASPR data path is a zip archive o
 path to the CSV file relative to the ASPR data path:
 
 ```ignore
-# use ixa_fips::aspr::archive::{CBSA_ALL_DIR, ASPRRecordIterator};
+# use ixa_aspr::archive::{CBSA_ALL_DIR, ASPRRecordIterator};
 # use std::path::PathBuf;
 let subdirectory = PathBuf::from(CBSA_ALL_DIR).join("AK/Ketchikan AK.csv");
 let records = ASPRRecordIterator::from_path(subdirectory);
@@ -34,7 +34,7 @@ The `ASPRRecordIterator::state_population()` function is a convenience function 
 records in `${ASPR_DATA_PATH}/${ALL_STATES_DIR}/${state}.csv`.
 
 ```ignore
-# use ixa_fips::aspr::archive::{ASPRRecordIterator};
+# use ixa_aspr::archive::{ASPRRecordIterator};
 # use ixa_fips::USState;
 let records = ASPRRecordIterator::state_population(USState::AK);
 // Do something with the records...
@@ -44,7 +44,7 @@ You can get a list of CSV files in a given subdirectory of the ASPR data path wi
 is useful for chaining record iterators using the `from_file_iterator` constructor method:
 
 ```ignore
-# use ixa_fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
+# use ixa_aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
 let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_DIR).unwrap());
 // Do something with the records...
 ```
@@ -52,15 +52,18 @@ let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_D
 */
 
 use crate::{
-    aspr::{
-        errors::ASPRError,
-        parser::{parse_fips_home_id, parse_fips_school_id, parse_fips_workplace_id},
-        ASPRPersonRecord,
+    errors::ASPRError,
+    parser::{
+        parse_fips_home_id, 
+        parse_fips_school_id, 
+        parse_fips_workplace_id
     },
-    states::USState,
+    ASPRPersonRecord,
 };
+use ixa_fips::states::USState;
 use once_cell::sync::Lazy;
 use ouroboros::self_referencing;
+use zip::{read::ZipFile, ZipArchive};
 use std::{
     fs::File,
     io::Lines,
@@ -68,7 +71,6 @@ use std::{
     path::PathBuf,
     sync::RwLock,
 };
-use zip::{read::ZipFile, ZipArchive};
 
 // Directory structure of the ASPR data
 pub const ALL_STATES_DIR: &str = "all_states";
@@ -79,7 +81,7 @@ pub const NON_CBSA_RESIDENTS_DIR: &str = "non_CBSA_residents";
 pub const MULTI_STATE_DIR: &str = "Multi-state";
 
 // Path to the ASPR data directory
-const DEFAULT_ASPR_DATA_PATH: &str = "../CDC/data/ASPR_Synthetic_Population";
+const DEFAULT_ASPR_DATA_PATH: &str = "../../CDC/data/ASPR_Synthetic_Population";
 // ToDo: Get the ASPR data path from an environment variable.
 static ASPR_DATA_PATH: Lazy<RwLock<PathBuf>> =
     Lazy::new(|| RwLock::new(PathBuf::from(DEFAULT_ASPR_DATA_PATH)));
@@ -282,7 +284,7 @@ impl ASPRRecordIterator {
     /// the `iter_csv_files` function:
     ///
     /// ```ignore
-    /// # use ixa_fips::aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
+    /// # use ixa_aspr::archive::{iter_csv_files, ALL_STATES_DIR, ASPRRecordIterator};
     /// let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_DIR).unwrap());
     /// ```
     pub fn from_file_iterator(
@@ -408,8 +410,15 @@ mod tests {
         let _guard = TEST_MUTEX.lock();
 
         set_aspr_data_path(get_aspr_data_path().with_extension("zip"));
+        println!("USING PATH {:?}", get_aspr_data_path());
 
-        let records = ASPRRecordIterator::state_population(USState::WY).unwrap();
+        let records = match ASPRRecordIterator::state_population(USState::WY) {
+            Ok(records) => records,
+            Err(error) => { 
+                panic!("{:?}", error);
+            },
+        };
+        
         // We count the lines in the file excluding the header:
         //     583,201 - 1 = 583,200
         assert_eq!(records.count(), 583200);
