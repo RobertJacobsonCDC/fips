@@ -16,6 +16,9 @@ homepage = "https://github.com/CDCgov/ixa"
 ixa-aspr = { path = "ixa-aspr" }
 ixa-fips = { path = "." }
 
+## For the USState enum
+strum = { version = "0.27", features = ["derive"] }
+
 ## Dependencies for "aspr_archive"
 zip = "3.0.0"
 once_cell = "1"
@@ -39,6 +42,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+strum.workspace = true
 
 [lints]
 workspace = true
