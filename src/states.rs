@@ -90,7 +90,8 @@ impl USState {
         if !Self::valid_code(value) {
             return Err(());
         }
-        Ok(unsafe { std::mem::transmute(value) })
+        // Safety: The value is valid as checked by `valid_code`.
+        Ok(unsafe { std::mem::transmute::<StateCode, USState>(value) })
     }
 
     pub fn valid_code(code: StateCode) -> bool {

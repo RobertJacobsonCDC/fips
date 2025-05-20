@@ -54,8 +54,8 @@ let records = ASPRRecordIterator::from_file_iterator(iter_csv_files(ALL_STATES_D
 use crate::{
     errors::ASPRError,
     parser::{
-        parse_fips_home_id, 
-        parse_fips_school_id, 
+        parse_fips_home_id,
+        parse_fips_school_id,
         parse_fips_workplace_id
     },
     ASPRPersonRecord,
@@ -331,7 +331,6 @@ impl Iterator for ASPRRecordIterator {
 mod tests {
     //! These tests assume the existence of data in the default ASPR data path AND the existence of the zip archive
     //! in the default ASPR data path.
-
     use super::*;
 
     // Enforce serial execution of tests. Since the "zip" tests change the ASPR data path, we also need to set the
@@ -414,11 +413,11 @@ mod tests {
 
         let records = match ASPRRecordIterator::state_population(USState::WY) {
             Ok(records) => records,
-            Err(error) => { 
+            Err(error) => {
                 panic!("{:?}", error);
             },
         };
-        
+
         // We count the lines in the file excluding the header:
         //     583,201 - 1 = 583,200
         assert_eq!(records.count(), 583200);

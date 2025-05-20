@@ -9,6 +9,16 @@
 * **Batteries included for the ASPR dataset.** Transparent iterators load ASPR CSVs whether they live in a directory tree *or* a ZIP archive, so large synthetic populations stream in record-by-record.
 * **Ergonomic, strongly-typed API.** Rich enums (`USState`, `SettingCategory`, …) prevent illegal states at compile time and make downstream code self-documenting.
 
+## Standard alignment
+
+This crate is designed to be usable with any revision of the standard. The standard-dependent properties of this library
+are:
+
+* The minimal subset of the U.S. state codes that includes only proper states and the District of Columbia. The codes
+  for this subset have been stable for every revision.
+* The number of digits that represent the U.S. state, county, and census tract codes (2, 3, and 6 respectively) in the
+  parsing routines.
+
 ## Core primitives
 
 | Type / Module   | Purpose                                                      |

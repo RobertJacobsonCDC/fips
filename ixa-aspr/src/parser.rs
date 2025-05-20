@@ -177,7 +177,7 @@ pub fn parse_integer(input: &str) -> FIPSParseResult<u64> {
 
 #[cfg(test)]
 mod tests {
-    use ixa_fips::StateCode;
+    use ixa_fips::{ExpandedFIPSCode, StateCode};
     use super::*;
 
     #[test]
@@ -377,5 +377,54 @@ mod tests {
 
         // Test with special characters after digits
         assert_eq!(parse_workplace_id("16380@#$%"), Ok(("@#$%", 16380)));
+    }
+    
+    #[test]
+    fn test_parse_aspr_data() {
+        let test_data = vec![
+            ("481559501000128",
+             ExpandedFIPSCode{state: USState::TX, county: 155, tract: 950100, category: 1, id: 128, data: 0}),
+            ("48155950100001",
+             ExpandedFIPSCode{state: USState::TX, county: 155, tract: 950100, category: 3, id: 1, data: 0}),
+            ("021300003000173",
+             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 300, category: 1, id: 173, data: 0}),
+            ("02130000400002",
+             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 400, category: 3, id: 2, data: 0}),
+            ("021300001000499",
+             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 100, category: 1, id: 499, data: 0}),
+            ("484879507000440",
+             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950700, category: 1, id: 440, data: 0}),
+            ("4848795060000714",
+             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950600, category: 2, id: 714, data: 0}),
+            ("484879506001139",
+             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950600, category: 1, id: 1139, data: 0}),
+            ("484879506001457",
+             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950600, category: 1, id: 1457, data: 0}),
+            ("4848795050000091",
+             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950500, category: 2, id: 91, data: 0}),
+            ("021300003000687",
+             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 300, category: 1, id: 687, data: 0}),
+            ("021300002001412",
+             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 200, category: 1, id: 1412, data: 0}),
+            ("0213000020000291",
+             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 200, category: 2, id: 291, data: 0}),
+            ("484879505000385",
+             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950500, category: 1, id: 385, data: 0}),
+            ("021300002001170",
+             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 200, category: 1, id: 1170, data: 0}),
+        ];
+        
+        for (fips_code, expected) in test_data {
+            // These codes are context sensitive. We cheat by storing the `SettingCategory` in the expected value
+            // and using that to parse the code.
+            let result = match expected.category {
+                1 => parse_fips_home_id(fips_code),
+                2 => parse_fips_workplace_id(fips_code),
+                3|4 => parse_fips_school_id(fips_code),
+                _ => panic!("Invalid category"),
+            };
+            let result: (&str, FIPSCode) = result.unwrap_or_else(|_| panic!("Failed to parse {}", fips_code));
+            assert_eq!(ExpandedFIPSCode::from_fips_code(result.1), expected)
+        }
     }
 }
