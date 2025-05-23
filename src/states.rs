@@ -1,13 +1,9 @@
-/*!
-
-An enum for U.S. states as represented by FIPS Geographic Region Codes. This is a minimal subset of FIPS state codes 
-which have been stable for every FIPS standard revision so far. 
-See https://www.census.gov/library/reference/code-lists/ansi.html#states
-
-Note that the `FIPSCode` encoded type only uses six bits to encode the state code, which can accommodate codes <= 63. 
-Thus, it is best to only use `FIPSCode` for these states.
-
-*/
+//! An enum for U.S. states as represented by FIPS Geographic Region Codes. This is a minimal subset of FIPS state codes
+//! which have been stable for every FIPS standard revision so far.
+//! See https://www.census.gov/library/reference/code-lists/ansi.html#states
+//!
+//! Note that the `FIPSCode` encoded type only uses six bits to encode the state code, which can accommodate codes <= 63.
+//! Thus, it is best to only use `FIPSCode` for these states.
 
 use crate::StateCode;
 use strum::AsRefStr;
@@ -70,39 +66,29 @@ pub enum USState {
 impl USState {
     /// Returns true if `self` is a state or District of Columbia
     pub fn is_state(&self) -> bool {
-        let v = *self as StateCode;
-        v <= 56u8 && ![3u8, 7, 14, 43, 52].contains(&v)
+        USState::is_state_code(*self as StateCode)
     }
 
-    /// Returns true if `self` is a state (not including District of Columbia)
-    pub fn is_proper_state(&self) -> bool {
-        self.is_state() && *self as StateCode != 11
+    /// Returns true if the given state code is a state or District of Columbia
+    pub fn is_state_code(value: StateCode) -> bool {
+        value <= 56u8 && ![3u8, 7, 14, 43, 52].contains(&value)
     }
 
     /// Returns the numeric FIPS code for this state.
-    ///
-    /// This representation only requires 6 bits if `self.is_state()`.
     pub fn encode(&self) -> StateCode {
         *self as StateCode
     }
 
+    /// Returns the state for the given numeric FIPS code.
+    /// Returns `None` if the code is invalid.
     pub fn decode(value: StateCode) -> Result<USState, ()> {
-        if !Self::valid_code(value) {
+        if !Self::is_state_code(value) {
             return Err(());
         }
-        // Safety: The value is valid as checked by `valid_code`.
+        // Safety: The value is valid as checked by `is_state_code`.
         Ok(unsafe { std::mem::transmute::<StateCode, USState>(value) })
     }
-
-    pub fn valid_code(code: StateCode) -> bool {
-        // The list in this next line contains all values between 1 and 98 that are not assigned to a valid region.
-        // Note that there are codes that are neither states nor EAS maritime region codes nor FIPS 5-1 reserved codes,
-        // like Midway Islands, for example.
-        code != 0 && code <= 98 && ![62u8, 63, 80, 82, 83, 85, 87, 88, 90].contains(&code)
-    }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -117,12 +103,6 @@ mod tests {
     fn test_is_state() {
         assert!(USState::AK.is_state());
         assert!(USState::DC.is_state());
-    }
-
-    #[test]
-    fn test_is_proper_state() {
-        assert!(USState::AK.is_proper_state());
-        assert!(!USState::DC.is_proper_state());
     }
 
     #[test]
