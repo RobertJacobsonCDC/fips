@@ -6,11 +6,17 @@ license.workspace = true
 
 
 [features]
-default = ["aspr_tests"]
+default = ["aspr_archive"]
 
-# Runs tests that assume the existence of ASPR Synthetic Population files from ZIP archives
-aspr_tests = ["aspr_archive"]
-aspr_archive = ["zip", "once_cell", "ouroboros"] # Reading ASPR Synthetic Population files from ZIP archives
+# Runs tests that assume the exisstence of ASPR Synthetic Population files from ZIP archives
+aspr_tests = ["aspr_dataset_tests", "aspr_zip_tests"]
+# Just (unzipped) dataset tests
+aspr_dataset_tests = ["aspr_archive"]
+# Just zipped dataset tests
+aspr_zip_tests = ["aspr_archive"]
+
+# Reading ASPR Synthetic Population files from ZIP archives
+aspr_archive = ["zip", "once_cell", "ouroboros"]
 
 [dependencies]
 ixa-fips.workspace = true

@@ -1,29 +1,36 @@
 //! These high-level functions parse the concatenated FIPS code and ids.
 
+use ixa_fips::StateCode;
 use crate::{
     SettingCategory,
     FIPSCode,
     fips::parser::{parse_decimal_digits_to_bits, parse_state_code, FIPSParseResult, FIPSParserError},
-    fips::states::USState,
     fips::{CountyCode, IdCode, TractCode},
 };
 
 /// Parses the input as a FIPS code for a home id. Returns `(FIPSCode, rest)`,
 /// where `rest` is the remaining input after the FIPS code.
 pub fn parse_fips_home_id(input: &str) -> FIPSParseResult<FIPSCode> {
-    let (rest, state): (&str, USState) = parse_state_code(input)?;
+    let (rest, state): (&str, StateCode) = parse_state_code(input)?;
     let (rest, county): (&str, CountyCode) = parse_county_code(rest)?;
     let (rest, tract): (&str, TractCode) = parse_tract_code(rest)?;
     let (rest, home_id): (&str, IdCode) = parse_home_id(rest)?;
 
+    // Because the parser functions verify that the parsed values fit into the required number of bits, 
+    // this *should* be infallible.
     let fips_code = FIPSCode::new(state, county, tract, SettingCategory::Home.into(), home_id, 0);
-    Ok((rest, fips_code))
+    match fips_code {
+        Ok(fips_code) => Ok((rest, fips_code)),
+        Err(_) => {
+            panic!("FIPS code is invalid. This is a bug in the ASPR parser.");
+        }
+    }
 }
 
 /// Parses the input as a FIPS code for a school id. Returns `(FIPSCode, rest)`,
 /// where `rest` is the remaining input after the FIPS code.
 pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
-    let (rest, state): (&str, USState) = parse_state_code(input)?;
+    let (rest, state): (&str, StateCode) = parse_state_code(input)?;
     let (rest, county): (&str, CountyCode) = parse_county_code(rest)?;
 
     if rest.starts_with("x") {
@@ -37,7 +44,12 @@ pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
             school_id,
             0,
         );
-        Ok((rest, fips_code))
+        match fips_code {
+            Ok(fips_code) => Ok((rest, fips_code)),
+            Err(_) => {
+                panic!("FIPS code is invalid. This is a bug in the ASPR parser.");
+            }
+        }
     } else {
         // Public school
         // Public schools also have a tract code.
@@ -51,27 +63,37 @@ pub fn parse_fips_school_id(input: &str) -> FIPSParseResult<FIPSCode> {
             school_id,
             0,
         );
-        Ok((rest, fips_code))
+        match fips_code {
+            Ok(fips_code) => Ok((rest, fips_code)),
+            Err(_) => {
+                panic!("FIPS code is invalid. This is a bug in the ASPR parser.");
+            }
+        }
     }
 }
 
 /// Parses the input as a FIPS code for a workplace id. Returns `(FIPSCode, rest)`,
 /// where `rest` is the remaining input after the FIPS code.
 pub fn parse_fips_workplace_id(input: &str) -> FIPSParseResult<FIPSCode> {
-    let (rest, state): (&str, USState) = parse_state_code(input)?;
+    let (rest, state): (&str, StateCode) = parse_state_code(input)?;
     let (rest, county): (&str, CountyCode) = parse_county_code(rest)?;
     let (rest, tract): (&str, TractCode) = parse_tract_code(rest)?;
     let (rest, workplace_id): (&str, IdCode) = parse_workplace_id(rest)?;
 
     let fips_code = FIPSCode::new(
-        state,
+        state.into(),
         county,
         tract,
         SettingCategory::Workplace.into(),
         workplace_id,
         0,
     );
-    Ok((rest, fips_code))
+    match fips_code {
+        Ok(fips_code) => Ok((rest, fips_code)),
+        Err(_) => {
+            panic!("FIPS code is invalid. This is a bug in the ASPR parser.");
+        }
+    }
 }
 
 /// Parses the first three digits of `input` as a county
@@ -118,7 +140,7 @@ pub fn parse_workplace_id(input: &str) -> FIPSParseResult<IdCode> {
 }
 
 /// Parses the next sequence of decimal digits in `input` without respect to
-/// its length of how many bits are required to represent it (thought it must
+/// its length or how many bits are required to represent it (thought it must
 /// implicitly be at most 64).
 pub fn parse_integer(input: &str) -> FIPSParseResult<u64> {
     // Find the first non-digit character
@@ -177,7 +199,7 @@ pub fn parse_integer(input: &str) -> FIPSParseResult<u64> {
 
 #[cfg(test)]
 mod tests {
-    use ixa_fips::{ExpandedFIPSCode, StateCode};
+    use ixa_fips::{ExpandedFIPSCode, StateCode, USState};
     use super::*;
 
     #[test]
@@ -383,35 +405,35 @@ mod tests {
     fn test_parse_aspr_data() {
         let test_data = vec![
             ("481559501000128",
-             ExpandedFIPSCode{state: USState::TX, county: 155, tract: 950100, category: 1, id: 128, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 155, tract: 950100, category: 1, id: 128, data: 0}),
             ("48155950100001",
-             ExpandedFIPSCode{state: USState::TX, county: 155, tract: 950100, category: 3, id: 1, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 155, tract: 950100, category: 3, id: 1, data: 0}),
             ("021300003000173",
-             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 300, category: 1, id: 173, data: 0}),
+             ExpandedFIPSCode{state: USState::AK.into(), county: 130, tract: 300, category: 1, id: 173, data: 0}),
             ("02130000400002",
-             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 400, category: 3, id: 2, data: 0}),
+             ExpandedFIPSCode{state: USState::AK.into(), county: 130, tract: 400, category: 3, id: 2, data: 0}),
             ("021300001000499",
-             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 100, category: 1, id: 499, data: 0}),
+             ExpandedFIPSCode{state: USState::AK.into(), county: 130, tract: 100, category: 1, id: 499, data: 0}),
             ("484879507000440",
-             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950700, category: 1, id: 440, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 487, tract: 950700, category: 1, id: 440, data: 0}),
             ("4848795060000714",
-             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950600, category: 2, id: 714, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 487, tract: 950600, category: 2, id: 714, data: 0}),
             ("484879506001139",
-             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950600, category: 1, id: 1139, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 487, tract: 950600, category: 1, id: 1139, data: 0}),
             ("484879506001457",
-             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950600, category: 1, id: 1457, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 487, tract: 950600, category: 1, id: 1457, data: 0}),
             ("4848795050000091",
-             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950500, category: 2, id: 91, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 487, tract: 950500, category: 2, id: 91, data: 0}),
             ("021300003000687",
-             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 300, category: 1, id: 687, data: 0}),
+             ExpandedFIPSCode{state: USState::AK.into(), county: 130, tract: 300, category: 1, id: 687, data: 0}),
             ("021300002001412",
-             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 200, category: 1, id: 1412, data: 0}),
+             ExpandedFIPSCode{state: USState::AK.into(), county: 130, tract: 200, category: 1, id: 1412, data: 0}),
             ("0213000020000291",
-             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 200, category: 2, id: 291, data: 0}),
+             ExpandedFIPSCode{state: USState::AK.into(), county: 130, tract: 200, category: 2, id: 291, data: 0}),
             ("484879505000385",
-             ExpandedFIPSCode{state: USState::TX, county: 487, tract: 950500, category: 1, id: 385, data: 0}),
+             ExpandedFIPSCode{state: USState::TX.into(), county: 487, tract: 950500, category: 1, id: 385, data: 0}),
             ("021300002001170",
-             ExpandedFIPSCode{state: USState::AK, county: 130, tract: 200, category: 1, id: 1170, data: 0}),
+             ExpandedFIPSCode{state: USState::AK.into(), county: 130, tract: 200, category: 1, id: 1170, data: 0}),
         ];
         
         for (fips_code, expected) in test_data {

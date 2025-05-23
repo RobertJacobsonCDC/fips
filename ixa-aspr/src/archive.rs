@@ -327,7 +327,7 @@ impl Iterator for ASPRRecordIterator {
     }
 }
 
-#[cfg(all(feature = "aspr_tests", test))]
+#[cfg(all(any(feature = "aspr_tests", feature = "aspr_dataset_tests", feature = "aspr_zip_tests"), test))]
 mod tests {
     //! These tests assume the existence of data in the default ASPR data path AND the existence of the zip archive
     //! in the default ASPR data path.
@@ -337,6 +337,7 @@ mod tests {
     // ASPR data path to the default value before running the tests.
     static TEST_MUTEX: Lazy<std::sync::Mutex<()>> = Lazy::new(|| std::sync::Mutex::new(()));
 
+    #[cfg(feature = "aspr_dataset_tests")]
     #[test]
     fn test_record_iterator_state_population() {
         let _guard = TEST_MUTEX.lock();
@@ -348,6 +349,7 @@ mod tests {
         assert_eq!(records.count(), 583200);
     }
 
+    #[cfg(feature = "aspr_dataset_tests")]
     #[test]
     fn test_record_iterator_from_path() {
         let _guard = TEST_MUTEX.lock();
@@ -366,6 +368,7 @@ mod tests {
         assert_eq!(records.count(), 14132);
     }
 
+    #[cfg(feature = "aspr_dataset_tests")]
     #[test]
     fn test_record_iterator_from_files() {
         let _guard = TEST_MUTEX.lock();
@@ -388,6 +391,7 @@ mod tests {
         assert_eq!(records.count(), 57454);
     }
 
+    #[cfg(feature = "aspr_dataset_tests")]
     #[test]
     fn test_state_row_iter() {
         let _guard = TEST_MUTEX.lock();
@@ -404,6 +408,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "aspr_zip_tests")]
     #[test]
     fn test_zip_record_iterator_state_population() {
         let _guard = TEST_MUTEX.lock();
@@ -423,6 +428,7 @@ mod tests {
         assert_eq!(records.count(), 583200);
     }
 
+    #[cfg(feature = "aspr_zip_tests")]
     #[test]
     fn test_zip_record_iterator_from_path() {
         let _guard = TEST_MUTEX.lock();
@@ -436,6 +442,7 @@ mod tests {
         assert_eq!(records.count(), 14132);
     }
 
+    #[cfg(feature = "aspr_zip_tests")]
     #[test]
     fn test_zip_record_iterator_from_files() {
         let _guard = TEST_MUTEX.lock();
@@ -459,6 +466,7 @@ mod tests {
         assert_eq!(records.count(), 57454);
     }
 
+    #[cfg(feature = "aspr_zip_tests")]
     #[test]
     fn test_zip_state_row_iter() {
         let _guard = TEST_MUTEX.lock();
