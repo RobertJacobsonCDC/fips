@@ -6,9 +6,9 @@ license.workspace = true
 
 
 [features]
-default = ["aspr_archive"]
+default = ["aspr_archive", "aspr_tests"]
 
-# Runs tests that assume the exisstence of ASPR Synthetic Population files from ZIP archives
+# Runs tests that assume the existence of ASPR Synthetic Population files from ZIP archives
 aspr_tests = ["aspr_dataset_tests", "aspr_zip_tests"]
 # Just (unzipped) dataset tests
 aspr_dataset_tests = ["aspr_archive"]

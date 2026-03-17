@@ -238,7 +238,7 @@ mod tests {
         assert!(parse_state_code("48rest").is_ok()); // Texas
         assert!(parse_state_code("36rest").is_ok()); // New York
 
-        // Check that remainder is correctly returned
+        // Check that `remainder` is correctly returned
         let (remainder, _) = parse_state_code("42Pennsylvania").unwrap();
         assert_eq!(remainder, "Pennsylvania");
     }
@@ -262,7 +262,7 @@ mod tests {
         assert_eq!(parse_county_code("123rest").unwrap().1, 123);
         assert_eq!(parse_county_code("999rest").unwrap().1, 999);
 
-        // Check that remainder is correctly returned
+        // Check that `remainder` is correctly returned
         let (remainder, _) = parse_county_code("001CountyName").unwrap();
         assert_eq!(remainder, "CountyName");
     }
